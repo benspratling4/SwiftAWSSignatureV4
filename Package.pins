@@ -1,0 +1,12 @@
+{
+  "autoPin": true,
+  "pins": [
+    {
+      "package": "Cryptor",
+      "reason": null,
+      "repositoryURL": "https://github.com/IBM-Swift/BlueCryptor.git",
+      "version": "0.8.9"
+    }
+  ],
+  "version": 1
+}

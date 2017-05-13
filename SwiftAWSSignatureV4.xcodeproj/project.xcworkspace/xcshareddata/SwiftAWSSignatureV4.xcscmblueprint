@@ -1,0 +1,30 @@
+{
+  "DVTSourceControlWorkspaceBlueprintPrimaryRemoteRepositoryKey" : "63C954CB98ED64D820CAE65ED2AE24190210511A",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyRepositoryLocationsKey" : {
+
+  },
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyStatesKey" : {
+    "63C954CB98ED64D820CAE65ED2AE24190210511A" : 9223372036854775807,
+    "CB7FD8B39A3635BAEA340C1AE3EF89553CB3204E" : 9223372036854775807
+  },
+  "DVTSourceControlWorkspaceBlueprintIdentifierKey" : "2227D452-4EB8-40D1-BF20-3F65A40A9490",
+  "DVTSourceControlWorkspaceBlueprintWorkingCopyPathsKey" : {
+    "63C954CB98ED64D820CAE65ED2AE24190210511A" : "SwiftAWSSignatureV4\/",
+    "CB7FD8B39A3635BAEA340C1AE3EF89553CB3204E" : "SwiftAWSSignatureV4\/.build\/checkouts\/BlueCryptor.git-2709167748876642405\/"
+  },
+  "DVTSourceControlWorkspaceBlueprintNameKey" : "SwiftAWSSignatureV4",
+  "DVTSourceControlWorkspaceBlueprintVersion" : 204,
+  "DVTSourceControlWorkspaceBlueprintRelativePathToProjectKey" : "SwiftAWSSignatureV4.xcodeproj",
+  "DVTSourceControlWorkspaceBlueprintRemoteRepositoriesKey" : [
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "https:\/\/github.com\/benspratling4\/SwiftAWSSignatureV4.git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "63C954CB98ED64D820CAE65ED2AE24190210511A"
+    },
+    {
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryURLKey" : "\/Users\/ben\/GitHub\/SwiftAWSSignatureV4\/.build\/repositories\/BlueCryptor.git-2709167748876642405",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositorySystemKey" : "com.apple.dt.Xcode.sourcecontrol.Git",
+      "DVTSourceControlWorkspaceBlueprintRemoteRepositoryIdentifierKey" : "CB7FD8B39A3635BAEA340C1AE3EF89553CB3204E"
+    }
+  ]
+}
