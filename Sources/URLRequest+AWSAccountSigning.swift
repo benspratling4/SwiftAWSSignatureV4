@@ -18,7 +18,7 @@ extension UInt8 {
 	var hex:String {
 		let lowBits:UInt8 = self & 0x0F
 		let highBits:UInt8 = (self >> 4)
-		return UInt8.hexChars[Int(lowBits)] + UInt8.hexChars[Int(highBits)]
+		return UInt8.hexChars[Int(highBits)] + UInt8.hexChars[Int(lowBits)]
 	}
 }
 
