@@ -117,8 +117,8 @@ extension URLRequest {
 		headers.append("\n")
 		let signedHeaders:String = headerValues.map({$0.0}).joined(separator: ";")
 		
-		let hashedBody:String = signPayload ? sha256HashedBody.map { CryptoUtils.hexString(from: $0) }
-		?? "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" : "UNSIGNED-PAYLOAD"
+		let hashedBody:String = signPayload ? sha256HashedBody.map { CryptoUtils.hexString(from: $0).uppercased() }
+		?? "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855" : "UNSIGNED-PAYLOAD"
 		
 		return ([verb, encodedURI, queryString ?? "", headers, signedHeaders, hashedBody].joined(separator: "\n"), signedHeaders)
 	}
