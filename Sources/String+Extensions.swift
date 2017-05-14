@@ -42,7 +42,7 @@ extension String {
 	}
 	
 	//following amazon's rules
-	func uriEncoded(encodeSlash:Bool)->String? {
+	public func aws_uriEncoded(encodeSlash:Bool)->String? {
 		//is utf8 the right encoding?  Amazon's docs assume ascii
 		guard let bytes:Data = data(using: .utf8) else { return nil }
 		var finalString:String = ""
