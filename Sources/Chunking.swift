@@ -71,12 +71,11 @@ extension URLRequest {
 		if !includedContentEncoding {
 			newRequest.addValue("aws-chunked", forHTTPHeaderField: "Content-Encoding")
 		}
-		//newRequest.addValue("STREAMING-AWS4-HMAC-SHA256-PAYLOAD", forHTTPHeaderField: "x-amz-content-sha256")
 		newRequest.addValue("\(totalLength)", forHTTPHeaderField: "x-amz-decoded-content-length")
 		//calculate new length
 		let numberOfNonZeroChunks:UInt64 = (totalLength / UInt64(chunkSize))
 		//always use
-		let lengthOfZeroChunk:Int = ChunkedStream.chunkSignatureIntro.count + 64 + 4 /*\r\n\r\n*/ + 16 /*.bytesAsHex*/
+		let lengthOfZeroChunk:Int = ChunkedStream.chunkSignatureIntro.count + 64 /*hash output length in hex*/ + 4 /*\r\n\r\n*/ + 16 /*.bytesAsHex*/
 		let lengthOfNonZeroChunk:Int = lengthOfZeroChunk + chunkSize
 		var extraChunkLength:UInt64 = totalLength % UInt64(chunkSize)
 		if extraChunkLength > 0 {
@@ -84,7 +83,7 @@ extension URLRequest {
 		}
 		
 		let totalLengthWithMetaData:UInt64 = (numberOfNonZeroChunks * UInt64(lengthOfNonZeroChunk)) + UInt64(lengthOfZeroChunk) + extraChunkLength
-		print("said \(totalLengthWithMetaData) total length")
+		//print("said \(totalLengthWithMetaData) total length")
 		newRequest.addValue("\(totalLengthWithMetaData)", forHTTPHeaderField: "Content-Length")
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
 		guard let (authheader, seedSignature) = newRequest.newChunkingAuthorizationHeader(account: account, now: date, nowComponents: nowComponents) else { return nil }
@@ -95,8 +94,8 @@ extension URLRequest {
 		guard let signingKey:[UInt8] = account.keyForSigning(now: nowComponents) else {
 			return nil
 		}
-		/*let newStream:InputStream = ChunkedStream(account: account, originalStream: originalStream, originalContentLength: totalLength, chunkSize: chunkSize, timeAndScope:timeAndScopeString, signingKey:signingKey, seedSignature: seedSignature)*/
-		let newStream:InputStream = ChunkedBodyStreamComponents(account: account, originalStream: originalStream, originalContentLength: totalLength, chunkSize: chunkSize, timeAndScope:timeAndScopeString, signingKey:signingKey, seedSignature: seedSignature).stream
+		let newStream:InputStream = ChunkedStream(account: account, originalStream: originalStream, originalContentLength: totalLength, chunkSize: chunkSize, finalTotalLength:totalLengthWithMetaData, timeAndScope:timeAndScopeString, signingKey:signingKey, seedSignature: seedSignature)
+		/*let newStream:InputStream = ChunkedBodyStreamComponents(account: account, originalStream: originalStream, originalContentLength: totalLength, chunkSize: chunkSize, timeAndScope:timeAndScopeString, signingKey:signingKey, seedSignature: seedSignature).stream*/
 		newRequest.httpBodyStream = newStream
 		return newRequest
 	}
@@ -197,7 +196,7 @@ public class ChunkedBodyStreamComponents {
 	
 	func chunkSignature(_ data:Data)->String {
 		let string = stringToSign(thisChunkData: data)
-		print("string to sign = \(string)")
+		//print("string to sign = \(string)")
 		let signature:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(signingKey)).update(byteArray: CryptoUtils.byteArray(from:string))!.final()
 		return CryptoUtils.hexString(from: signature)
 	}
@@ -221,12 +220,12 @@ public class ChunkedBodyStreamComponents {
 		var chunks:[Data] = []
 		for i in 0..<numberOfFullSizeChunks {
 			let subData:Data = allData.subdata(in: (i*chunkSize)..<((i+1)*chunkSize))
-			print("chunk size = \(subData.count)")
+			//print("chunk size = \(subData.count)")
 			chunks.append(subData)
 		}
 		if allData.count % chunkSize != 0 {
 			let overFlowData = allData.subdata(in: (numberOfFullSizeChunks*chunkSize)..<allData.count)
-			print("chunk size = \(overFlowData.count)")
+			//print("chunk size = \(overFlowData.count)")
 			chunks.append(overFlowData)
 		}
 		chunks.append(Data())
@@ -238,10 +237,10 @@ public class ChunkedBodyStreamComponents {
 				else {
 					continue
 			}
-			print("chunk length = \(chunkData.count)")
+			//print("chunk length = \(chunkData.count)")
 			finalBody.append(chunkData)
 		}
-		print("finalbody count = \(finalBody.count)")
+		//print("finalbody count = \(finalBody.count)")
 		return finalBody
 	}
 	
@@ -249,7 +248,9 @@ public class ChunkedBodyStreamComponents {
 
 
 
-public class ChunkedStream : InputStream {
+@objc public class ChunkedStream : InputStream, StreamDelegate {
+	
+	static let readBufferSize:Int = 8192
 	
 	static let chunkSignatureIntro:Data = ";chunk-signature=".data(using: .utf8)!
 	
@@ -261,7 +262,9 @@ public class ChunkedStream : InputStream {
 	
 	private let signingKey:[UInt8]
 	
-	public init(account:AWSAccount, originalStream:InputStream, originalContentLength:UInt64, chunkSize:Int, timeAndScope:String, signingKey:[UInt8], seedSignature:String) {
+	private let delayQueue:DispatchQueue = DispatchQueue(label: "delay chunked stream event queue")
+	
+	public init(account:AWSAccount, originalStream:InputStream, originalContentLength:UInt64, chunkSize:Int, finalTotalLength:UInt64, timeAndScope:String, signingKey:[UInt8], seedSignature:String) {
 		self.account = account
 		self.originalInputStream = originalStream
 		self.originalContentLength = originalContentLength
@@ -269,20 +272,223 @@ public class ChunkedStream : InputStream {
 		self.previousSignature = seedSignature
 		self.timeAndScope = timeAndScope
 		self.signingKey = signingKey
-		//precompute all data?
-		
-		
+		self.finalTotalLength = finalTotalLength
 		super.init(data: Data())
 	}
 	
+	private let finalTotalLength:UInt64
+	
+	
+	@objc public override func read(_ buffer: UnsafeMutablePointer<UInt8>, maxLength len: Int) -> Int {
+		print("read(_, max:\(len)) (readInCount = \(readInCount))")
+		//if possible, read in as many bytes as possible
+		while originalInputStream.hasBytesAvailable && bytesToSend.count < len {
+			if readInBytes() == 0 {
+				break
+			}
+		}
+		
+		let readSize:Int = min(len, bytesToSend.count)
+		if readSize > 0 {
+			bytesToSend.copyBytes(to: buffer, from: 0..<readSize)
+			bytesToSend.removeSubrange(0..<readSize)
+			sentBodyBytes += readSize
+			print("read \(readSize) bytes")
+		}
+		
+		if UInt64(readInCount) == originalContentLength
+			,addMoreChunksIfPossible()
+			,let (runloop, mode) = scheduledRunLoopsMode {
+			delayQueue.asyncAfter(wallDeadline: .now() + 0.00001, execute: {
+				runloop.perform(#selector(ChunkedStream.triggerSendingHasBytesAvailable), target: self, argument: nil, order: 0, modes: [mode])
+			})
+		}
+		if UInt64(readInCount) == originalContentLength && bytesToSend.count == 0 {
+			if let (runloop, mode) = scheduledRunLoopsMode {
+				delayQueue.asyncAfter(wallDeadline: .now() + 0.00001, execute: {
+					runloop.perform(#selector(ChunkedStream.triggerSendingEnd), target: self, argument: nil, order: 1, modes: [mode])
+				})
+			}
+		}
+		if bytesToSend.count > 0 {
+			if let (runloop, mode) = scheduledRunLoopsMode {
+				delayQueue.asyncAfter(wallDeadline: .now() + 0.00001, execute: {
+					runloop.perform(#selector(ChunkedStream.triggerSendingHasBytesAvailable), target: self, argument: nil, order: 1, modes: [mode])
+				})
+			}
+		}
+		
+		return readSize
+	}
+	
+	@objc func triggerSendingHasBytesAvailable(_ sender:AnyObject?) {
+		print("telling delegate there are more bytes available, readbytes = \(readInCount)")
+		_delegate?.stream?(self, handle: .hasBytesAvailable)
+	}
+	
+	@objc func triggerSendingEnd(_ sender:AnyObject?) {
+		print("telling delegate we have no more bytes available")
+		_delegate?.stream?(self, handle: .endEncountered)
+	}
+	
+	@objc public override func open() {
+		print("open")
+		originalInputStream.open()
+	}
+	
+	@objc public override func close() {
+		print("close")
+		originalInputStream.close()
+	}
+	
+	
+	@objc public override var streamError: Error? {
+		return originalInputStream.streamError
+	}
+	
+	@objc public override var streamStatus: Stream.Status {
+		let originalStatus:Stream.Status = originalInputStream.streamStatus
+		guard case .atEnd = originalStatus else { return originalStatus }
+		return UInt64(sentBodyBytes) == finalTotalLength ? .atEnd : .open
+	}
+	
+	public override var hasBytesAvailable: Bool {
+		return originalInputStream.hasBytesAvailable || bytesToSend.count > 0
+	}
+	
+	private var buffer:UnsafeMutablePointer<UInt8> = UnsafeMutablePointer<UInt8>.allocate(capacity: ChunkedStream.readBufferSize)
+	
+	deinit {
+		buffer.deallocate(capacity: ChunkedStream.readBufferSize)
+	}
+	
+	private weak var _delegate:StreamDelegate?
+	
+	@objc public override var delegate: StreamDelegate? {
+		get {
+			return _delegate
+		}
+		set {
+			print("set stream delegate \(newValue)")
+			_delegate = newValue ?? self
+			if newValue == nil {
+				originalInputStream.delegate = nil
+			} else {
+				originalInputStream.delegate = self
+			}
+		}
+	}
+	
+	
+	var scheduledRunLoopsMode:(RunLoop, RunLoopMode)?
+	
+	@objc public override func schedule(in aRunLoop: RunLoop, forMode mode: RunLoopMode) {
+		scheduledRunLoopsMode = (aRunLoop, mode)
+		print("schedule(in:\(aRunLoop), forMode:\(mode))")
+		originalInputStream.schedule(in: aRunLoop, forMode: mode)
+	}
+	
+	@objc public override func remove(from aRunLoop: RunLoop, forMode mode: RunLoopMode) {
+		aRunLoop.cancelPerformSelectors(withTarget: self)
+		scheduledRunLoopsMode = nil
+		print("remove(from:\(aRunLoop), forMode:\(mode))")
+		originalInputStream.remove(from: aRunLoop, forMode: mode)
+	}
+	
+	
+	private func readInBytes()->Int {
+		let readCount = originalInputStream.read(buffer, maxLength: ChunkedStream.readBufferSize)
+		if readCount > 0 {
+			collectedBodyBytes.append(buffer, count:readCount)
+			readInCount += readCount
+			let _ = addMoreChunksIfPossible()
+		}
+		return readCount
+	}
+	
+	
+	public func stream(_ aStream: Stream, handle eventCode: Stream.Event) {
+		print("stream(\(aStream), handle\(eventCode)")
+		if aStream === originalInputStream {
+			if eventCode == .hasBytesAvailable {
+				while originalInputStream.hasBytesAvailable && bytesToSend.count < (2 * chunkSize) {
+					let readCount = readInBytes()
+					if readCount > 0 {
+						print("read \(readCount) from original stream")
+						//processPossibleChunks()
+					} else if readCount < 0 {
+						print("stream read error")
+						//error
+					}
+				}
+			} else if eventCode == .openCompleted {
+				_delegate?.stream?(self, handle: .openCompleted)
+			} else if eventCode == .errorOccurred {
+				_delegate?.stream?(self, handle: eventCode)
+			} else if eventCode == .endEncountered {
+				//TODO: write me
+				processPossibleChunks()
+			}
+		}
+		
+	}
+	
+	//converts more read bytes into bytes to send, returns true if it did that
+	func addMoreChunksIfPossible()->Bool {
+		var didWriteMoreBytes:Bool = false
+		while (collectedBodyBytes.count > chunkSize
+			|| UInt64(readInCount) == originalContentLength)
+			&& collectedBodyBytes.count > 0 {
+			let readSize:Int = min(chunkSize, collectedBodyBytes.count)
+			let subData:Data = collectedBodyBytes.subdata(in: 0..<readSize)
+			collectedBodyBytes.removeSubrange(0..<readSize)
+			if let body:Data = chunkBody(content:subData) {
+				print("added chunk with \(body.count) bytes")
+				bytesToSend.append(body)
+				didWriteMoreBytes = true
+			}
+		}
+		if UInt64(readInCount) == originalContentLength && didWriteMoreBytes {
+			//end condition - empty
+			if let body:Data = chunkBody(content:Data()) {
+				bytesToSend.append(body)
+				print("added last chunk")
+				
+				//endEncountered
+			}
+		}
+		return didWriteMoreBytes
+	}
+	
+	func processPossibleChunks() {
+		if addMoreChunksIfPossible() {
+			if let (runloop, mode) = scheduledRunLoopsMode {
+				delayQueue.asyncAfter(wallDeadline: .now() + 0.00001, execute: {
+					runloop.perform(#selector(ChunkedStream.triggerSendingHasBytesAvailable), target: self, argument: nil, order: 0, modes: [mode])
+				})
+			}
+			//delegate?.stream?(self, handle: .hasBytesAvailable)
+		}
+	}
+	
+	/// bytes we will send, once sent, they are removed
 	private var bytesToSend:Data = Data()
+	
+	///the running count of how many bytes have been sent
 	private var sentBodyBytes:Int = 0
+	
+	///bytes we've read in from the original stream, once processed, they are removed
+	private var collectedBodyBytes:Data = Data()
+	
+	///total count of btyes
+	private var readInCount:Int = 0
+	
 	private var chunkSize:Int
+	
+	///how many bytes should be in the original content, without chunking metadata
 	private let originalContentLength:UInt64
 	private let originalInputStream:InputStream
 	private let account:AWSAccount
-	
-	//TODO: write me
 	
 	
 	func stringToSign(thisChunkData:Data)->String {
@@ -291,8 +497,8 @@ public class ChunkedStream : InputStream {
 		stringComponents.append(previousSignature)
 		stringComponents.append("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")	//hash("")
 		guard let thisHash:String = (Digest(using: .sha256).update(data: thisChunkData)?.final()).map({ CryptoUtils.hexString(from: $0).uppercased() }) else { return "" }
-		previousSignature = thisHash
-		stringComponents.append(thisHash)
+		
+		stringComponents.append(thisHash.lowercased())
 		return stringComponents.joined(separator: "\n")
 	}
 	
@@ -303,42 +509,11 @@ public class ChunkedStream : InputStream {
 	}
 	
 	func chunkBody(content:Data)->Data? {
-		guard let length:Data = UInt64(content.count).bytesAsHex.data(using: .utf8)
-			,let sig:Data = chunkSignature(content).data(using: .utf8)
-			else { return nil }
-		
+		guard let length:Data = UInt64(content.count).bytesAsHex.data(using: .utf8) else { return nil }
+		let signature:String = chunkSignature(content).lowercased()
+		guard let sig:Data = signature.data(using: .utf8) else { return nil }
+		previousSignature = signature
 		return length + ChunkedStream.chunkSignatureIntro + sig + ChunkedStream.chunkSignatureNewLine + content + ChunkedStream.chunkSignatureNewLine
-	}
-	
-	///for testing before implementing streaming
-	/// reads all data from original stream, write it into
-	func cheat() {
-		let allData:Data = originalInputStream.allData
-		
-		let numberOfFullSizeChunks:Int = allData.count / chunkSize
-		
-		var chunks:[Data] = []
-		for i in 0..<numberOfFullSizeChunks {
-			let subData:Data = allData.subdata(in: (i*chunkSize)..<((i+1)*chunkSize))
-			chunks.append(subData)
-		}
-		if allData.count % chunkSize != 0 {
-			let overFlowData = allData.subdata(in: (numberOfFullSizeChunks*chunkSize)..<allData.count)
-			chunks.append(overFlowData)
-		}
-		chunks.append(Data())
-		
-		var finalBody:Data = Data()
-		
-		for chunk in chunks {
-			guard let chunkData:Data = chunkBody(content: chunk)
-				else {
-				continue
-			}
-			finalBody.append(chunkData)
-		}
-		
-		
 	}
 	
 }
