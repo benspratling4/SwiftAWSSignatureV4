@@ -26,13 +26,27 @@ extension UInt8 {
 extension URLRequest {
 	
 	///adds an Authorization header
-	public mutating func sign(for account:AWSAccount, signPayload:Bool = false) {
+	/// uses chunking if a chunk size is specified, or if the httpBody is a stream.
+	/// sends as a single chunk if the body is Data and the chunk
+	public mutating func sign(for account:AWSAccount, signPayload:Bool = false, chunkSize:Int? = nil) {
 		let now:Date = Date()
-		sign(for: account, now: now, signPayload:signPayload)
+		sign(for: account, now: now, signPayload:signPayload, chunkSize:chunkSize)
 	}
 	
 	///primarily for testing
-	mutating func sign(for account:AWSAccount, now:Date, signPayload:Bool = false) {
+	mutating func sign(for account:AWSAccount, now:Date, signPayload:Bool = false, chunkSize:Int? = nil) {
+		if let chunkSize = chunkSize {
+			if let dataBody = httpBody {
+				httpBodyStream = InputStream(data: dataBody)
+				httpBody = nil
+			}
+			signChunkingRequest(for: account, date: now, chunkSize: chunkSize)
+			return
+		} else if httpBodyStream != nil {
+			signChunkingRequest(for: account, date: now, chunkSize:URLRequest.minimumAWSChunkSize)	//default chunk size
+			return
+		}
+		//regular data signing
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:now)
 		//add some headers
 		addPreAuthHeaders(date:now, signPayload:signPayload)
