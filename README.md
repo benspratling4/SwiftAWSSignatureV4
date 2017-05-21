@@ -4,9 +4,9 @@ AWS's signature version 4 in cross-platform Swift
 
 Given a (mutable) `URLRequest`, sign with AWS Signature v4 using an instance of an `AWSAccount`, which would include your IAM credentials.
 
-	`var request:URLRequest = ...`
-	`let account:AWSAccount = ...`
-	`request.sign(for:account)`
+	var request:URLRequest = ...
+	let account:AWSAccount = ...
+	request.sign(for:account)
 
 With a simple `Data` as the `.httpBody` of the request, no chunking is used. 
 
@@ -14,7 +14,11 @@ Appropriate date headers are added for you as part of the signing process.  You 
 
 To use chunking, provide an `InputStream` as the `.httpBodyStream` of the request, and / or provide a value for the chunk size (in bytes):
 
-	`request.sign(for:account, chunkSize:32568)`
+	request.sign(for:account, chunkSize:32568)
+
+Chunking alters the `.httpBodyStream`, so do not alter the `.httpBodyStream` after signing. 
+
+## Testing/ Platform Status
 
 Signing without chunking has been tested on both macOS and Linux.  Chunking has only been tested on macOS.  Chunking is primarily useful for streams, which send data before reading the entire body in RAM.  Stream support may be altered or improve on Linux in the near future.
 
