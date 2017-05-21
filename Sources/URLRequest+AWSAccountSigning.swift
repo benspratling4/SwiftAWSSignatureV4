@@ -136,7 +136,7 @@ extension URLRequest {
 	func stringToSign(AWSAccount:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
 		let timeString:String = HTTPDate(now: nowComponents)
 		guard let (request, signedHeaders) = canonicalRequest(now:now, signPayload:signPayload) else { return nil }
-		print("canonical request = \(request)")
+		//print("canonical request = \(request)")
 		let hashOfCanonicalRequest:[UInt8] = Digest(using: .sha256).update(string: request)?.final() ?? []
 		let hexHash:String = CryptoUtils.hexString(from: hashOfCanonicalRequest)
 		
@@ -148,7 +148,7 @@ extension URLRequest {
 		guard let signingKey:[UInt8] = AWSAccount.keyForSigning(now:nowComponents)
 			,let (string, signedHeaders) = stringToSign(AWSAccount:AWSAccount, now:now, nowComponents:nowComponents, signPayload:signPayload)
 			else { return nil }
-		print("string to sign = \(string)")
+		//print("string to sign = \(string)")
 		let signature:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(signingKey)).update(byteArray: CryptoUtils.byteArray(from:string))!.final()
 		let signatureHex:String = CryptoUtils.hexString(from: signature)
 		
