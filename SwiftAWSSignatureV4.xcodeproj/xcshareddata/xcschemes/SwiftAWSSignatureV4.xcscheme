@@ -14,7 +14,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "OBJ_27"
+               BlueprintIdentifier = "OBJ_33"
                BuildableName = "Cryptor.framework"
                BlueprintName = "Cryptor"
                ReferencedContainer = "container:SwiftAWSSignatureV4.xcodeproj">
@@ -28,7 +28,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "OBJ_43"
+               BlueprintIdentifier = "OBJ_49"
                BuildableName = "SwiftAWSSignatureV4.framework"
                BlueprintName = "SwiftAWSSignatureV4"
                ReferencedContainer = "container:SwiftAWSSignatureV4.xcodeproj">
@@ -42,6 +42,16 @@
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
       <Testables>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "OBJ_61"
+               BuildableName = "SwiftAWSSignatureV4Tests.xctest"
+               BlueprintName = "SwiftAWSSignatureV4Tests"
+               ReferencedContainer = "container:SwiftAWSSignatureV4.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
       <AdditionalOptions>
       </AdditionalOptions>
@@ -59,7 +69,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "OBJ_27"
+            BlueprintIdentifier = "OBJ_33"
             BuildableName = "Cryptor.framework"
             BlueprintName = "Cryptor"
             ReferencedContainer = "container:SwiftAWSSignatureV4.xcodeproj">

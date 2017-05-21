@@ -49,8 +49,8 @@ open class AWSAccount {
 		return aCalendar
 	}()
 	
-	func dateComponents(for date:Date)->DateComponents {
-		return AWSAccount.calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second], from: Date())
+	static func dateComponents(for date:Date)->DateComponents {
+		return calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second], from: Date())
 	}
 	
 	///this is a keeper
@@ -64,5 +64,6 @@ open class AWSAccount {
 			,let dateRegionServiceKey:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(dateRegionKey)).update(byteArray: CryptoUtils.byteArray(from:serviceName))?.final() else { return nil }
 		return HMAC(using:HMAC.Algorithm.sha256, key: Data(dateRegionServiceKey)).update(byteArray: CryptoUtils.byteArray(from:"aws4_request"))?.final()
 	}
+	
 	
 }

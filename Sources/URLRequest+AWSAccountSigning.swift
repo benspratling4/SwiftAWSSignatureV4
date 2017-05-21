@@ -26,24 +26,24 @@ extension UInt8 {
 extension URLRequest {
 	
 	///adds an Authorization header
-	public mutating func sign(for AWSAccount:AWSAccount, signPayload:Bool = false) {
+	public mutating func sign(for account:AWSAccount, signPayload:Bool = false) {
 		let now:Date = Date()
-		sign(for: AWSAccount, now: now, signPayload:signPayload)
+		sign(for: account, now: now, signPayload:signPayload)
 	}
 	
 	///primarily for testing
-	mutating func sign(for AWSAccount:AWSAccount, now:Date, signPayload:Bool = false) {
+	mutating func sign(for account:AWSAccount, now:Date, signPayload:Bool = false) {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:now)
 		//add some headers
-		addPreAuthHeaders(for:AWSAccount, date:now, signPayload:signPayload)
+		addPreAuthHeaders(date:now, signPayload:signPayload)
 		//auth header
-		let header = newAuthorizationHeader(AWSAccount: AWSAccount, now: now, nowComponents: nowComponents, signPayload:signPayload)
+		let header = newAuthorizationHeader(account: account, now: now, nowComponents: nowComponents, signPayload:signPayload)
 		setValue(header, forHTTPHeaderField: "Authorization")
 	}
 	
 	
 	///create headers which should be added before auth signing happens
-	mutating func addPreAuthHeaders(for AWSAccount:AWSAccount, date:Date, signPayload:Bool = false) {
+	mutating func addPreAuthHeaders(date:Date, signPayload:Bool = false) {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
 		//credential
 		//setValue(AWSAccount.credentialString(now:nowComponents), forHTTPHeaderField: "x-amz-credential")
@@ -93,7 +93,7 @@ extension URLRequest {
 	}
 	
 	
-	func canonicalRequest(now:Date, signPayload:Bool)->(request:String, signedHeaders:String)? {
+	func canonicalRequestBeforePayload()->(request:String, signedHeaders:String)? {
 		let verb:String = httpMethod ?? "GET"
 		guard var uriString:String = url?.path else { return nil } 	//TODO: "URI Encode"
 		var queryString:String? = url?.query
@@ -106,21 +106,26 @@ extension URLRequest {
 			let reconstituted:[String] = queryItems.map{
 				$0.components(separatedBy: "=")
 					.flatMap{$0.aws_uriEncoded(encodeSlash: true)}
-				.joined(separator: "=")}
+					.joined(separator: "=")}
 			queryString = reconstituted.joined(separator: "&")
 		}
 		
 		let headerValues:[(String, String)] = canonicalHeaders()
 		var headers:String = headerValues.map { (key, value) -> String in
 			return key + ":" + value
-		}.joined(separator: "\n")
+			}.joined(separator: "\n")
 		headers.append("\n")
 		let signedHeaders:String = headerValues.map({$0.0}).joined(separator: ";")
 		
+		return ([verb, encodedURI, queryString ?? "", headers, signedHeaders].joined(separator: "\n"), signedHeaders)
+	}
+	
+	
+	func canonicalRequest(signPayload:Bool)->(request:String, signedHeaders:String)? {
+		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload() else { return nil }
 		let hashedBody:String = signPayload ? sha256HashedBody.map { CryptoUtils.hexString(from: $0).uppercased() }
-		?? "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855" : "UNSIGNED-PAYLOAD"
-		
-		return ([verb, encodedURI, queryString ?? "", headers, signedHeaders, hashedBody].joined(separator: "\n"), signedHeaders)
+			?? "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855" : "UNSIGNED-PAYLOAD"
+		return (beforePayload + "\n" + hashedBody, signedHeaders)
 	}
 	
 	
@@ -133,26 +138,26 @@ extension URLRequest {
 	}
 	
 	
-	func stringToSign(AWSAccount:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
+	func stringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
 		let timeString:String = HTTPDate(now: nowComponents)
-		guard let (request, signedHeaders) = canonicalRequest(now:now, signPayload:signPayload) else { return nil }
+		guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload) else { return nil }
 		//print("canonical request = \(request)")
 		let hashOfCanonicalRequest:[UInt8] = Digest(using: .sha256).update(string: request)?.final() ?? []
 		let hexHash:String = CryptoUtils.hexString(from: hashOfCanonicalRequest)
 		
-		return ("AWS4-HMAC-SHA256\n" + timeString + "\n" + AWSAccount.scope(now: nowComponents) + "\n" + hexHash, signedHeaders)
+		return ("AWS4-HMAC-SHA256\n" + timeString + "\n" + account.scope(now: nowComponents) + "\n" + hexHash, signedHeaders)
 	}
 	
 	
-	func newAuthorizationHeader(AWSAccount:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool = false)->String? {
-		guard let signingKey:[UInt8] = AWSAccount.keyForSigning(now:nowComponents)
-			,let (string, signedHeaders) = stringToSign(AWSAccount:AWSAccount, now:now, nowComponents:nowComponents, signPayload:signPayload)
+	func newAuthorizationHeader(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool = false)->String? {
+		guard let signingKey:[UInt8] = account.keyForSigning(now:nowComponents)
+			,let (string, signedHeaders) = stringToSign(account:account, now:now, nowComponents:nowComponents, signPayload:signPayload)
 			else { return nil }
 		//print("string to sign = \(string)")
 		let signature:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(signingKey)).update(byteArray: CryptoUtils.byteArray(from:string))!.final()
 		let signatureHex:String = CryptoUtils.hexString(from: signature)
 		
-		return "AWS4-HMAC-SHA256 Credential=\(AWSAccount.credentialString(now:nowComponents)),SignedHeaders=\(signedHeaders),Signature=\(signatureHex)"
+		return "AWS4-HMAC-SHA256 Credential=\(account.credentialString(now:nowComponents)),SignedHeaders=\(signedHeaders),Signature=\(signatureHex)"
 	}
 	
 }
