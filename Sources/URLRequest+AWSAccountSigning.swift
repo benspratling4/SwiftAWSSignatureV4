@@ -28,23 +28,15 @@ extension URLRequest {
 	///adds an Authorization header
 	/// uses chunking if a chunk size is specified, or if the httpBody is a stream.
 	/// sends as a single chunk if the body is Data and the chunk
-	public mutating func sign(for account:AWSAccount, signPayload:Bool = false, chunkSize:Int? = nil) {
+	public mutating func sign(for account:AWSAccount, signPayload:Bool = false) {
 		let now:Date = Date()
-		sign(for: account, now: now, signPayload:signPayload, chunkSize:chunkSize)
+		sign(for: account, now: now, signPayload:signPayload)
 	}
 	
 	///primarily for testing
-	mutating func sign(for account:AWSAccount, now:Date, signPayload:Bool = false, chunkSize:Int? = nil) {
-		if let chunkSize = chunkSize {
-			if let dataBody = httpBody {
-				httpBodyStream = InputStream(data: dataBody)
-				httpBody = nil
-			}
-			signChunkingRequest(for: account, date: now, chunkSize: chunkSize)
-			return
-		} else if httpBodyStream != nil {
-			signChunkingRequest(for: account, date: now, chunkSize:URLRequest.minimumAWSChunkSize)	//default chunk size
-			return
+	mutating func sign(for account:AWSAccount, now:Date, signPayload:Bool = false) {
+		if httpBodyStream != nil {
+            fatalError("Stream requests aren't supported in this version")
 		}
 		//regular data signing
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:now)
