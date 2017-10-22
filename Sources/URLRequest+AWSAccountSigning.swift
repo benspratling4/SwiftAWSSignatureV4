@@ -111,11 +111,11 @@ extension URLRequest {
 		let verb:String = httpMethod ?? "GET"
 		guard var uriString:String = url?.path else { return nil } 	//TODO: "URI Encode"
 		var queryString:String? = url?.query
-		if queryString != nil {
+		if queryString?.isEmpty == false {
 			uriString.append("?")
 		}
 		guard let encodedURI:String = uriString.aws_uriEncoded(encodeSlash: false) else { return nil }
-		if let queryLongString = queryString {
+		if let queryLongString = queryString, !queryLongString.isEmpty  {
 			let queryItems:[String] = queryLongString.components(separatedBy: "&")
 			let reconstituted:[String] = queryItems.map{
 				$0.components(separatedBy: "=")
