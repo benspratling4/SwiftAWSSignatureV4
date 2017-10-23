@@ -28,6 +28,7 @@ extension URLRequest {
 	///adds an Authorization header
 	/// uses chunking if a chunk size is specified, or if the httpBody is a stream.
 	/// sends as a single chunk if the body is Data and the chunk
+	/// chunking is ignored on non-apple platforms
 	public mutating func sign(for account:AWSAccount, signPayload:Bool = false, chunkSize:Int? = nil) {
 		let now:Date = Date()
 		sign(for: account, now: now, signPayload:signPayload, chunkSize:chunkSize)
@@ -35,6 +36,7 @@ extension URLRequest {
 	
 	///primarily for testing
 	mutating func sign(for account:AWSAccount, now:Date, signPayload:Bool = false, chunkSize:Int? = nil) {
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 		if let chunkSize = chunkSize {
 			if let dataBody = httpBody {
 				httpBodyStream = InputStream(data: dataBody)
@@ -46,6 +48,7 @@ extension URLRequest {
 			signChunkingRequest(for: account, date: now, chunkSize:URLRequest.minimumAWSChunkSize)	//default chunk size
 			return
 		}
+#endif
 		//regular data signing
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:now)
 		//add some headers

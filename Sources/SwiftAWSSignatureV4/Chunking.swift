@@ -31,6 +31,7 @@ extension UInt64 {
 	}
 }
 
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 
 extension URLRequest {
 	///amazon's documentation is ambiguous as to whether the minimum chunk size is 8kB or 8kiB
@@ -429,3 +430,5 @@ extension InputStream {
 	}
 	
 }
+
+#endif
