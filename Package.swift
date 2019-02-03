@@ -8,7 +8,7 @@ let package = Package(
 			targets: ["SwiftAWSSignatureV4"]),
 		],
 	dependencies:[
-		.package(url:"https://github.com/IBM-Swift/BlueCryptor.git", from:"0.8.18")
+		.package(url:"https://github.com/IBM-Swift/BlueCryptor.git", from:"1.0.0")
 	],
 	targets:[
 		.target(

@@ -255,7 +255,7 @@ extension URLRequest {
 	private var buffer:UnsafeMutablePointer<UInt8> = UnsafeMutablePointer<UInt8>.allocate(capacity: ChunkedStream.readBufferSize)
 	
 	deinit {
-		buffer.deallocate(capacity: ChunkedStream.readBufferSize)
+		buffer.deallocate()
 	}
 	
 	private weak var _delegate:StreamDelegate?
@@ -425,7 +425,7 @@ extension InputStream {
 			let readByteCount:Int = read(buffer, maxLength: bufferLength)
 			data.append(buffer, count: readByteCount)
 		}
-		buffer.deallocate(capacity: bufferLength)
+		buffer.deallocate()
 		return data
 	}
 	

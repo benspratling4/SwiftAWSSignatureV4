@@ -122,7 +122,7 @@ extension URLRequest {
 			let queryItems:[String] = queryLongString.components(separatedBy: "&")
 			let reconstituted:[String] = queryItems.map{
 				$0.components(separatedBy: "=")
-					.flatMap{$0.aws_uriEncoded(encodeSlash: true)}
+                    .compactMap{$0.aws_uriEncoded(encodeSlash: true)}
 					.joined(separator: "=")}
 			queryString = reconstituted.joined(separator: "&")
 		}
