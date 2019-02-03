@@ -94,9 +94,13 @@ extension URLRequest {
 //        let second:String = "\(now.second!)".prepadded("0", length: 2)
 //        return dayName + ", " + day + " " + monthShort + " " + year + " " + hour + ":" + minute + ":" + second + " GMT"
   
+        // https://docs.aws.amazon.com/general/latest/gr/sigv4-date-handling.html
+        /*
+        The time stamp must be in UTC and in the following ISO 8601 format: YYYYMMDD'T'HHMMSS'Z'. For example, 20150830T123600Z is a valid time stamp. Do not include milliseconds in the time stamp.
+        */
         let formatter = DateFormatter()
-        formatter.timeZone = TimeZone(identifier: "GMT")
-        formatter.dateFormat = "yyyyMMddHHmmss"
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
         return formatter.string(from: date)
 	}
 	
