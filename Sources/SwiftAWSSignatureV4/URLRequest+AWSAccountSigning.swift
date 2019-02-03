@@ -96,7 +96,7 @@ extension URLRequest {
   
         let formatter = DateFormatter()
         formatter.timeZone = TimeZone(identifier: "GMT")
-        formatter.dateFormat = "yyyyMMddHHmmss+0000"
+        formatter.dateFormat = "yyyyMMddHHmmss"
         return formatter.string(from: date)
 	}
 	
