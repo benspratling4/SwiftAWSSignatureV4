@@ -64,7 +64,8 @@ extension URLRequest {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
 		//credential
 		//setValue(AWSAccount.credentialString(now:nowComponents), forHTTPHeaderField: "x-amz-credential")
-		setValue(HTTPDate(now:nowComponents), forHTTPHeaderField: "Date")
+        
+		setValue(HTTPDate(now:nowComponents, date: date), forHTTPHeaderField: "Date")
 		if let _ = httpBody {
 			if signPayload {
 				//TODO: verify me
@@ -77,17 +78,26 @@ extension URLRequest {
 			setValue("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", forHTTPHeaderField: "x-amz-content-sha256")
 		}
 	}
-	
+
+    /* 2/3/19; CGP; When used for signing AWS SNS CreatePlatformEndpoint request, I get the error:
+            <Message>Date must be in ISO-8601 \'basic format\'. Got \'Sun, 03 Feb 2019 20:14:11 GMT\'. See http://en.wikipedia.org/wiki/ISO_8601</Message>
+        Example in basic format: 20160707T211822+0300
+    */
 	///creates a
-	func HTTPDate(now:DateComponents)->String {
-		let dayName:String = AWSAccount.calendar.shortWeekdaySymbols[now.weekday! - 1]
-		let monthShort:String = AWSAccount.calendar.shortMonthSymbols[now.month! - 1]
-		let year:String = "\(now.year!)"
-		let day:String = "\(now.day!)".prepadded("0", length: 2)
-		let hour:String = "\(now.hour!)".prepadded("0", length: 2)
-		let minute:String = "\(now.minute!)".prepadded("0", length: 2)
-		let second:String = "\(now.second!)".prepadded("0", length: 2)
-		return dayName + ", " + day + " " + monthShort + " " + year + " " + hour + ":" + minute + ":" + second + " GMT"
+	func HTTPDate(now:DateComponents, date: Date)->String {
+//        let dayName:String = AWSAccount.calendar.shortWeekdaySymbols[now.weekday! - 1]
+//        let monthShort:String = AWSAccount.calendar.shortMonthSymbols[now.month! - 1]
+//        let year:String = "\(now.year!)"
+//        let day:String = "\(now.day!)".prepadded("0", length: 2)
+//        let hour:String = "\(now.hour!)".prepadded("0", length: 2)
+//        let minute:String = "\(now.minute!)".prepadded("0", length: 2)
+//        let second:String = "\(now.second!)".prepadded("0", length: 2)
+//        return dayName + ", " + day + " " + monthShort + " " + year + " " + hour + ":" + minute + ":" + second + " GMT"
+  
+        let formatter = DateFormatter()
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "yyyyMMddTHH:mm:ss+0000"
+        return formatter.string(from: date)
 	}
 	
 	///returns sorted key-value tuples
@@ -156,7 +166,7 @@ extension URLRequest {
 	
 	
 	func stringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
-		let timeString:String = HTTPDate(now: nowComponents)
+		let timeString:String = HTTPDate(now: nowComponents, date: now)
 		guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload) else { return nil }
 		//print("canonical request = \(request)")
 		let hashOfCanonicalRequest:[UInt8] = Digest(using: .sha256).update(string: request)?.final() ?? []
