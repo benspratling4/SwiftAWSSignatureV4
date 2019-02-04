@@ -29,8 +29,12 @@ extension URLRequest {
 	/// uses chunking if a chunk size is specified, or if the httpBody is a stream.
 	/// sends as a single chunk if the body is Data and the chunk
 	/// chunking is ignored on non-apple platforms
-	public mutating func sign(for account:AWSAccount, signPayload:Bool = false, chunkSize:Int? = nil) {
-		let now:Date = Date()
+    // 2/3/19; CGP; Added date parameter for testing.
+	public mutating func sign(for account:AWSAccount, signPayload:Bool = false, chunkSize:Int? = nil, date: Date? = nil) {
+		var now:Date = Date()
+        if let date = date {
+            now = date
+        }
 		sign(for: account, now: now, signPayload:signPayload, chunkSize:chunkSize)
 	}
 	
@@ -65,7 +69,8 @@ extension URLRequest {
 		//credential
 		//setValue(AWSAccount.credentialString(now:nowComponents), forHTTPHeaderField: "x-amz-credential")
         
-		setValue(HTTPDate(now:nowComponents, date: date), forHTTPHeaderField: "Date")
+        // 2/3/19; CGP; Changed from key "Date" to "X-Amz-Date"-- because this is what is in the AWS specs.
+		setValue(HTTPDate(now:nowComponents, date: date), forHTTPHeaderField: "X-Amz-Date")
 		if let _ = httpBody {
 			if signPayload {
 				//TODO: verify me
@@ -75,7 +80,8 @@ extension URLRequest {
 			}
 		} else {
 			//the hash of an empty string
-			setValue("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", forHTTPHeaderField: "x-amz-content-sha256")
+            // 2/3/19; CGP; This isn't needed or required.
+			// setValue("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", forHTTPHeaderField: "x-amz-content-sha256")
 		}
 	}
 
@@ -126,14 +132,19 @@ extension URLRequest {
 	
 	func canonicalRequestBeforePayload()->(request:String, signedHeaders:String)? {
 		let verb:String = httpMethod ?? "GET"
-		guard var uriString:String = url?.path else { return nil } 	//TODO: "URI Encode"
+		guard let uriString:String = url?.path else { return nil } 	//TODO: "URI Encode"
 		var queryString:String? = url?.query
-		if queryString?.isEmpty == false {
-			uriString.append("?")
-		}
+
+        // 2/3/19; CGP; From https://docs.aws.amazon.com/general/latest/gr/signature-v4-test-suite.html#signature-v4-test-suite-derived-creds, it seems this trailing "?" is not required or needed.
+		// if queryString?.isEmpty == false {
+		// 	uriString.append("?")
+		// }
+        
 		guard let encodedURI:String = uriString.aws_uriEncoded(encodeSlash: false) else { return nil }
+        
 		if let queryLongString = queryString, !queryLongString.isEmpty  {
-			let queryItems:[String] = queryLongString.components(separatedBy: "&")
+            // 2/3/19; CGP; Added sorting for query items. See https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
+			let queryItems:[String] = queryLongString.components(separatedBy: "&").sorted()
 			let reconstituted:[String] = queryItems.map{
 				$0.components(separatedBy: "=")
                     .compactMap{$0.aws_uriEncoded(encodeSlash: true)}
@@ -154,8 +165,9 @@ extension URLRequest {
 	
 	func canonicalRequest(signPayload:Bool)->(request:String, signedHeaders:String)? {
 		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload() else { return nil }
-		let hashedBody:String = signPayload ? sha256HashedBody.map { CryptoUtils.hexString(from: $0).uppercased() }
-			?? "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855" : "UNSIGNED-PAYLOAD"
+		let hashedBody:String = signPayload ? sha256HashedBody.map { CryptoUtils.hexString(from: $0).lowercased() }
+			?? "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".lowercased()
+                : "UNSIGNED-PAYLOAD"
 		return (beforePayload + "\n" + hashedBody, signedHeaders)
 	}
 	
@@ -168,27 +180,43 @@ extension URLRequest {
 		}
 	}
 	
-	
+    // 2/3/19; Factored out, for testing.
+	func hashCanonicalRequest(signPayload:Bool) -> (hashedRequest:String, signedHeaders:String)? {
+        guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload) else { return nil }
+        //print("canonical request = \(request)")
+        let hashOfCanonicalRequest:[UInt8] = Digest(using: .sha256).update(string: request)?.final() ?? []
+        let hexHash:String = CryptoUtils.hexString(from: hashOfCanonicalRequest)
+        return (hashedRequest: hexHash, signedHeaders: signedHeaders)
+    }
+    
 	func stringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
 		let timeString:String = HTTPDate(now: nowComponents, date: now)
-		guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload) else { return nil }
-		//print("canonical request = \(request)")
-		let hashOfCanonicalRequest:[UInt8] = Digest(using: .sha256).update(string: request)?.final() ?? []
-		let hexHash:String = CryptoUtils.hexString(from: hashOfCanonicalRequest)
+  
+        guard let (hashedRequest, signedHeaders) = hashCanonicalRequest(signPayload: signPayload) else {
+            return nil
+        }
 		
-		return ("AWS4-HMAC-SHA256\n" + timeString + "\n" + account.scope(now: nowComponents) + "\n" + hexHash, signedHeaders)
+        let scope = account.scope(now: nowComponents)
+		return ("AWS4-HMAC-SHA256\n" + timeString + "\n" + scope + "\n" + hashedRequest, signedHeaders)
 	}
 	
-	
+    // 2/3/19; CGP; Factored out for testing.
+    static func computeSignature(signingKey:[UInt8], stringToSign: String) -> String {
+        let signature:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(signingKey)).update(byteArray: CryptoUtils.byteArray(from:stringToSign))!.final()
+        let signatureHex:String = CryptoUtils.hexString(from: signature)
+        return signatureHex
+    }
+    
 	func newAuthorizationHeader(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool = false)->String? {
 		guard let signingKey:[UInt8] = account.keyForSigning(now:nowComponents)
 			,let (string, signedHeaders) = stringToSign(account:account, now:now, nowComponents:nowComponents, signPayload:signPayload)
 			else { return nil }
 		//print("string to sign = \(string)")
-		let signature:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(signingKey)).update(byteArray: CryptoUtils.byteArray(from:string))!.final()
-		let signatureHex:String = CryptoUtils.hexString(from: signature)
+  
+        let signatureHex = URLRequest.computeSignature(signingKey: signingKey, stringToSign: string)
 		
-		return "AWS4-HMAC-SHA256 Credential=\(account.credentialString(now:nowComponents)),SignedHeaders=\(signedHeaders),Signature=\(signatureHex)"
+        // 2/3/19; CGP; Added spaces after commas-- to be consistent with https://docs.aws.amazon.com/general/latest/gr/signature-v4-test-suite.html#signature-v4-test-suite-example
+		return "AWS4-HMAC-SHA256 Credential=\(account.credentialString(now:nowComponents)), SignedHeaders=\(signedHeaders), Signature=\(signatureHex)"
 	}
 	
 }
