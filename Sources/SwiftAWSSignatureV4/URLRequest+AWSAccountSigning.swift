@@ -61,8 +61,6 @@ extension URLRequest {
 		//auth header
 		let header = newAuthorizationHeader(account: account, urlQueryParams: urlQueryParams, now: now, nowComponents: nowComponents, signPayload:signPayload)
 		setValue(header, forHTTPHeaderField: "Authorization")
-  
-        self.url = nil
 	}
 	
 	
