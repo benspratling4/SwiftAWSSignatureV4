@@ -136,7 +136,7 @@ extension URLRequest {
 		guard var uriString:String = url?.path else { return nil } 	//TODO: "URI Encode"
 		
         // 2/5/19; In case caller doesn't give trailing "/"
-        if urlQueryParams == nil && uriString == "" {
+        if urlQueryParams != nil && uriString == "" {
             uriString = "/"
         }
         
