@@ -106,7 +106,7 @@ extension URLRequest {
 		setValue("STREAMING-AWS4-HMAC-SHA256-PAYLOAD", forHTTPHeaderField: "x-amz-content-sha256")
 	}
 	
-	func chunkingStringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents)->(string:String, signedHeaders:String)? {
+	mutating func chunkingStringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents)->(string:String, signedHeaders:String)? {
 		let timeString:String = HTTPDate(now: nowComponents, date: now)
 		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload() else {
 			return nil
@@ -121,7 +121,7 @@ extension URLRequest {
 	}
 	
 	
-	func seedSignature(account:AWSAccount, now:Date, nowComponents:DateComponents)->(signature:String, headers:String)? {
+	mutating func seedSignature(account:AWSAccount, now:Date, nowComponents:DateComponents)->(signature:String, headers:String)? {
 		guard let signingKey:[UInt8] = account.keyForSigning(now:nowComponents)
 			,let (string, signedHeaders) = chunkingStringToSign(account:account, now:now, nowComponents:nowComponents)
 			else {
@@ -133,7 +133,7 @@ extension URLRequest {
 		return (signatureHex, signedHeaders)
 	}
 	
-	func newChunkingAuthorizationHeader(account:AWSAccount, now:Date, nowComponents:DateComponents)->(headerValue:String, seedSignature:String)? {
+	mutating func newChunkingAuthorizationHeader(account:AWSAccount, now:Date, nowComponents:DateComponents)->(headerValue:String, seedSignature:String)? {
 		guard let (signature, signedHeaders) = seedSignature(account: account, now: now, nowComponents: nowComponents) else {
 			return nil
 		}

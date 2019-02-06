@@ -30,16 +30,17 @@ extension URLRequest {
 	/// sends as a single chunk if the body is Data and the chunk
 	/// chunking is ignored on non-apple platforms
     // 2/3/19; CGP; Added date parameter for testing.
-	public mutating func sign(for account:AWSAccount, signPayload:Bool = false, chunkSize:Int? = nil, date: Date? = nil) {
+    // 2/5/19; CGP; Added optional url queryParams-- See https://github.com/benspratling4/SwiftAWSSignatureV4/issues/5; if you use this, don't give query params in the URL.
+	public mutating func sign(for account:AWSAccount, urlQueryParams: Dictionary<String, String>? = nil, signPayload:Bool = false, chunkSize:Int? = nil, date: Date? = nil) {
 		var now:Date = Date()
         if let date = date {
             now = date
         }
-		sign(for: account, now: now, signPayload:signPayload, chunkSize:chunkSize)
+		sign(for: account, urlQueryParams: urlQueryParams, now: now, signPayload:signPayload, chunkSize:chunkSize)
 	}
 	
 	///primarily for testing
-	mutating func sign(for account:AWSAccount, now:Date, signPayload:Bool = false, chunkSize:Int? = nil) {
+	mutating func sign(for account:AWSAccount, urlQueryParams: Dictionary<String, String>? = nil, now:Date, signPayload:Bool = false, chunkSize:Int? = nil) {
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 		if let chunkSize = chunkSize {
 			if let dataBody = httpBody {
@@ -58,8 +59,10 @@ extension URLRequest {
 		//add some headers
 		addPreAuthHeaders(date:now, signPayload:signPayload)
 		//auth header
-		let header = newAuthorizationHeader(account: account, now: now, nowComponents: nowComponents, signPayload:signPayload)
+		let header = newAuthorizationHeader(account: account, urlQueryParams: urlQueryParams, now: now, nowComponents: nowComponents, signPayload:signPayload)
 		setValue(header, forHTTPHeaderField: "Authorization")
+  
+        self.url = nil
 	}
 	
 	
@@ -130,10 +133,16 @@ extension URLRequest {
 	}
 	
 	
-	func canonicalRequestBeforePayload()->(request:String, signedHeaders:String)? {
+	mutating func canonicalRequestBeforePayload(urlQueryParams: Dictionary<String, String>? = nil)->(request:String, signedHeaders:String)? {
 		let verb:String = httpMethod ?? "GET"
-		guard let uriString:String = url?.path else { return nil } 	//TODO: "URI Encode"
-		var queryString:String? = url?.query
+		guard var uriString:String = url?.path else { return nil } 	//TODO: "URI Encode"
+		
+        // 2/5/19; In case caller doesn't give trailing "/"
+        if urlQueryParams == nil && uriString == "" {
+            uriString = "/"
+        }
+        
+        var queryString:String? = url?.query
 
         // 2/3/19; CGP; From https://docs.aws.amazon.com/general/latest/gr/signature-v4-test-suite.html#signature-v4-test-suite-derived-creds, it seems this trailing "?" is not required or needed.
 		// if queryString?.isEmpty == false {
@@ -141,15 +150,26 @@ extension URLRequest {
 		// }
         
 		guard let encodedURI:String = uriString.aws_uriEncoded(encodeSlash: false) else { return nil }
+    
+        func urlEncode(queryItems: [String]) -> String {
+            let reconstituted:[String] = queryItems.map{
+                $0.components(separatedBy: "=")
+                    .compactMap{$0.aws_uriEncoded(encodeSlash: true)}
+                    .joined(separator: "=")}
+            return reconstituted.joined(separator: "&")
+        }
         
-		if let queryLongString = queryString, !queryLongString.isEmpty  {
+        if let urlQueryParams = urlQueryParams {
+            let queryItems:[String] = urlQueryParams.map { (key, value) in
+                "\(key)=\(value)"
+            }.sorted()
+            queryString = urlEncode(queryItems: queryItems)
+            self.url = URL(string: self.url!.absoluteString + "/?" + queryString!)
+        }
+		else if let queryLongString = queryString, !queryLongString.isEmpty  {
             // 2/3/19; CGP; Added sorting for query items. See https://docs.aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html
 			let queryItems:[String] = queryLongString.components(separatedBy: "&").sorted()
-			let reconstituted:[String] = queryItems.map{
-				$0.components(separatedBy: "=")
-                    .compactMap{$0.aws_uriEncoded(encodeSlash: true)}
-					.joined(separator: "=")}
-			queryString = reconstituted.joined(separator: "&")
+			queryString = urlEncode(queryItems: queryItems)
 		}
 		
 		let headerValues:[(String, String)] = canonicalHeaders()
@@ -163,8 +183,8 @@ extension URLRequest {
 	}
 	
 	
-	func canonicalRequest(signPayload:Bool)->(request:String, signedHeaders:String)? {
-		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload() else { return nil }
+	mutating func canonicalRequest(signPayload:Bool, urlQueryParams: Dictionary<String, String>? = nil)->(request:String, signedHeaders:String)? {
+		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload(urlQueryParams: urlQueryParams) else { return nil }
 		let hashedBody:String = signPayload ? sha256HashedBody.map { CryptoUtils.hexString(from: $0).lowercased() }
 			?? "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".lowercased()
                 : "UNSIGNED-PAYLOAD"
@@ -181,18 +201,18 @@ extension URLRequest {
 	}
 	
     // 2/3/19; Factored out, for testing.
-	func hashCanonicalRequest(signPayload:Bool) -> (hashedRequest:String, signedHeaders:String)? {
-        guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload) else { return nil }
+	mutating func hashCanonicalRequest(signPayload:Bool, urlQueryParams: Dictionary<String, String>? = nil) -> (hashedRequest:String, signedHeaders:String)? {
+        guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload, urlQueryParams: urlQueryParams) else { return nil }
         //print("canonical request = \(request)")
         let hashOfCanonicalRequest:[UInt8] = Digest(using: .sha256).update(string: request)?.final() ?? []
         let hexHash:String = CryptoUtils.hexString(from: hashOfCanonicalRequest)
         return (hashedRequest: hexHash, signedHeaders: signedHeaders)
     }
     
-	func stringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
+	mutating func stringToSign(account:AWSAccount, urlQueryParams: Dictionary<String, String>? = nil, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
 		let timeString:String = HTTPDate(now: nowComponents, date: now)
   
-        guard let (hashedRequest, signedHeaders) = hashCanonicalRequest(signPayload: signPayload) else {
+        guard let (hashedRequest, signedHeaders) = hashCanonicalRequest(signPayload: signPayload, urlQueryParams: urlQueryParams) else {
             return nil
         }
 		
@@ -207,9 +227,9 @@ extension URLRequest {
         return signatureHex
     }
     
-	func newAuthorizationHeader(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool = false)->String? {
+	mutating func newAuthorizationHeader(account:AWSAccount, urlQueryParams: Dictionary<String, String>? = nil, now:Date, nowComponents:DateComponents, signPayload:Bool = false)->String? {
 		guard let signingKey:[UInt8] = account.keyForSigning(now:nowComponents)
-			,let (string, signedHeaders) = stringToSign(account:account, now:now, nowComponents:nowComponents, signPayload:signPayload)
+			,let (string, signedHeaders) = stringToSign(account:account, urlQueryParams: urlQueryParams, now:now, nowComponents:nowComponents, signPayload:signPayload)
 			else { return nil }
 		//print("string to sign = \(string)")
   

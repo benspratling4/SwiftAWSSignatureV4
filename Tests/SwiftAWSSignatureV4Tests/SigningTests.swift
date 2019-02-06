@@ -19,20 +19,37 @@ class SigningTests : XCTestCase {
 //        X-Amz-Date:20150830T123600Z
     static let date = "20150830T123600Z"
     static let baseURL = "example.amazonaws.com"
+    static let urlQueryParams = ["Param2": "value2", "Param1": "value1"]
     static let urlString = "https://\(baseURL)/?Param2=value2&Param1=value1"
     static let url = URL(string: urlString)!
+    
+    // Should put trailing "/" if no args.
+    static let urlNoParams = URL(string: "https://\(baseURL)/")!
+    
     static let service = "service" // more realistically, this would be "sns"
     static let region = "us-east-1"
     static let secretKey = "wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY"
     static let accessKeyId = "AKIDEXAMPLE"
 
-    func testCanonicalRequestWithSignedPayload() {
-        var request = URLRequest(url: SigningTests.url)
+    func canonicalRequestWithSignedPayload(paramsInURL: Bool) {
+        var request:URLRequest!
+        if paramsInURL {
+            request = URLRequest(url: SigningTests.url)
+        }
+        else {
+            request = URLRequest(url: SigningTests.urlNoParams)
+        }
+        
         request.setValue(SigningTests.baseURL, forHTTPHeaderField: "Host")
         request.setValue(SigningTests.date, forHTTPHeaderField: "X-Amz-Date")
         request.httpMethod = "GET"
         
-        let result = request.canonicalRequest(signPayload: true)
+        var queryParams: [String: String]?
+        if !paramsInURL {
+            queryParams = SigningTests.urlQueryParams
+        }
+        
+        let result = request.canonicalRequest(signPayload: true, urlQueryParams: queryParams)
         print("result:\n\(result!.request)")
         
         let expected = """
@@ -48,14 +65,34 @@ class SigningTests : XCTestCase {
         print("expected:\n\(expected)")
         XCTAssert(result!.request == expected)
     }
+
+    func testCanonicalRequestWithSignedPayloadParamsInURL() {
+        canonicalRequestWithSignedPayload(paramsInURL: true)
+    }
     
-    func testHashCanonicalRequestWithSignedPayload() {
-        var request = URLRequest(url: SigningTests.url)
+    func testCanonicalRequestWithSignedPayloadParamsNotInURL() {
+        canonicalRequestWithSignedPayload(paramsInURL: false)
+    }
+    
+    func hashCanonicalRequestWithSignedPayload(paramsInURL: Bool) {
+        var request:URLRequest!
+        if paramsInURL {
+            request = URLRequest(url: SigningTests.url)
+        }
+        else {
+            request = URLRequest(url: SigningTests.urlNoParams)
+        }
+        
         request.setValue(SigningTests.baseURL, forHTTPHeaderField: "Host")
         request.setValue(SigningTests.date, forHTTPHeaderField: "X-Amz-Date")
         request.httpMethod = "GET"
         
-        guard let (hashedRequest, _) = request.hashCanonicalRequest(signPayload: true) else {
+        var queryParams: [String: String]?
+        if !paramsInURL {
+            queryParams = SigningTests.urlQueryParams
+        }
+        
+        guard let (hashedRequest, _) = request.hashCanonicalRequest(signPayload: true, urlQueryParams: queryParams) else {
             XCTFail()
             return
         }
@@ -65,8 +102,23 @@ class SigningTests : XCTestCase {
         XCTAssert(hashedRequest == expected)
     }
     
-    func testStringToSignWithSignedPayload() {
-        var request = URLRequest(url: SigningTests.url)
+    func testHashCanonicalRequestWithSignedPayloadParamsInURL() {
+        hashCanonicalRequestWithSignedPayload(paramsInURL: true)
+    }
+    
+    func testHashCanonicalRequestWithSignedPayloadParamsNotInURL() {
+        hashCanonicalRequestWithSignedPayload(paramsInURL: false)
+    }
+    
+    func stringToSignWithSignedPayload(paramsInURL: Bool) {
+        var request:URLRequest!
+        if paramsInURL {
+            request = URLRequest(url: SigningTests.url)
+        }
+        else {
+            request = URLRequest(url: SigningTests.urlNoParams)
+        }
+        
         request.setValue(SigningTests.baseURL, forHTTPHeaderField: "Host")
         request.setValue(SigningTests.date, forHTTPHeaderField: "X-Amz-Date")
         request.httpMethod = "GET"
@@ -78,8 +130,13 @@ class SigningTests : XCTestCase {
         let dateComponents = AWSAccount.dateComponents(for: date)
         
         let account = AWSAccount(serviceName: SigningTests.service, region: SigningTests.region, accessKeyID: SigningTests.accessKeyId, secretAccessKey: SigningTests.secretKey)
+
+        var queryParams: [String: String]?
+        if !paramsInURL {
+            queryParams = SigningTests.urlQueryParams
+        }
         
-        guard let (stringToSign,_) = request.stringToSign(account: account, now: date, nowComponents: dateComponents, signPayload: true) else {
+        guard let (stringToSign,_) = request.stringToSign(account: account, urlQueryParams: queryParams, now: date, nowComponents: dateComponents, signPayload: true) else {
             XCTFail()
             return
         }
@@ -93,6 +150,14 @@ class SigningTests : XCTestCase {
         
         print("stringToSign:\n\(stringToSign)")
         XCTAssert(stringToSign == expected)
+    }
+    
+    func testStringToSignWithSignedPayloadParamsInURL() {
+        stringToSignWithSignedPayload(paramsInURL: true)
+    }
+
+    func testStringToSignWithSignedPayloadParamsNotInURL() {
+        stringToSignWithSignedPayload(paramsInURL: false)
     }
     
     // See https://docs.aws.amazon.com/general/latest/gr/sigv4-calculate-signature.html
@@ -149,8 +214,15 @@ class SigningTests : XCTestCase {
         XCTAssert(expected == signatureHex)
     }
     
-    func testNewAuthorizationHeaderWithSignedPayload() {
-        var request = URLRequest(url: SigningTests.url)
+    func newAuthorizationHeaderWithSignedPayload(paramsInURL: Bool) {
+        var request:URLRequest!
+        if paramsInURL {
+            request = URLRequest(url: SigningTests.url)
+        }
+        else {
+            request = URLRequest(url: SigningTests.urlNoParams)
+        }
+        
         request.setValue(SigningTests.baseURL, forHTTPHeaderField: "Host")
         request.setValue(SigningTests.date, forHTTPHeaderField: "X-Amz-Date")
         request.httpMethod = "GET"
@@ -163,7 +235,12 @@ class SigningTests : XCTestCase {
         
         let account = AWSAccount(serviceName: SigningTests.service, region: SigningTests.region, accessKeyID: SigningTests.accessKeyId, secretAccessKey: SigningTests.secretKey)
         
-        guard let authHeader = request.newAuthorizationHeader(account: account, now: date, nowComponents: dateComponents, signPayload: true) else {
+        var queryParams: [String: String]?
+        if !paramsInURL {
+            queryParams = SigningTests.urlQueryParams
+        }
+        
+        guard let authHeader = request.newAuthorizationHeader(account: account, urlQueryParams: queryParams, now: date, nowComponents: dateComponents, signPayload: true) else {
             XCTFail()
             return
         }
@@ -174,9 +251,24 @@ class SigningTests : XCTestCase {
         XCTAssert(expected == authHeader)
     }
     
+    func testNewAuthorizationHeaderWithSignedPayloadParamsInURL() {
+        newAuthorizationHeaderWithSignedPayload(paramsInURL: true)
+    }
+    
+    func testNewAuthorizationHeaderWithSignedPayloadParamsNotInURL() {
+        newAuthorizationHeaderWithSignedPayload(paramsInURL: false)
+    }
+    
     // This is an actual use case. i.e., how the signing should appear in an application's code.
-    func testAddSigningInformationToRequestWithPayloadSigning() {
-        var request = URLRequest(url: SigningTests.url)
+    func addSigningInformationToRequestWithPayloadSigning(paramsInURL: Bool) {
+        var request:URLRequest!
+        if paramsInURL {
+            request = URLRequest(url: SigningTests.url)
+        }
+        else {
+            request = URLRequest(url: SigningTests.urlNoParams)
+        }
+
         request.setValue(SigningTests.baseURL, forHTTPHeaderField: "Host")
         
         // The URLRequest sign method adds this header.
@@ -192,7 +284,12 @@ class SigningTests : XCTestCase {
         
         let account = AWSAccount(serviceName: SigningTests.service, region: SigningTests.region, accessKeyID: SigningTests.accessKeyId, secretAccessKey: SigningTests.secretKey)
         
-        request.sign(for: account, signPayload: true, date: date)
+        var queryParams: [String: String]?
+        if !paramsInURL {
+            queryParams = SigningTests.urlQueryParams
+        }
+        
+        request.sign(for: account, urlQueryParams: queryParams, signPayload: true, date: date)
         
         /*
         GET /?Param2=value2&Param1=value1 HTTP/1.1
@@ -217,6 +314,14 @@ class SigningTests : XCTestCase {
         print("headers['Authorization']: \(auth)")
         
         XCTAssert(headers["Authorization"] == "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, SignedHeaders=host;x-amz-date, Signature=b97d918cfa904a5beff61c982a1b6f458b799221646efd99d3219ec94cdf2500")
+    }
+    
+    func testAddSigningInformationToRequestWithPayloadSigningParamsInURL() {
+        addSigningInformationToRequestWithPayloadSigning(paramsInURL: true)
+    }
+    
+    func testAddSigningInformationToRequestWithPayloadSigningParamsNotInURL() {
+        addSigningInformationToRequestWithPayloadSigning(paramsInURL: false)
     }
 }
 
