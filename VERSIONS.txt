@@ -1,0 +1,4 @@
+SwiftAWSSignatureV4
+
+Version 1.2
+	Update to Swift 5

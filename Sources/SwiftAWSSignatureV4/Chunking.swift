@@ -276,15 +276,15 @@ extension URLRequest {
 	}
 	
 	
-	var scheduledRunLoopsMode:(RunLoop, RunLoopMode)?
+    var scheduledRunLoopsMode:(RunLoop, RunLoop.Mode)?
 	
-	@objc public override func schedule(in aRunLoop: RunLoop, forMode mode: RunLoopMode) {
+    @objc public override func schedule(in aRunLoop: RunLoop, forMode mode: RunLoop.Mode) {
 		scheduledRunLoopsMode = (aRunLoop, mode)
 		//print("schedule(in:\(aRunLoop), forMode:\(mode))")
 		originalInputStream.schedule(in: aRunLoop, forMode: mode)
 	}
 	
-	@objc public override func remove(from aRunLoop: RunLoop, forMode mode: RunLoopMode) {
+    @objc public override func remove(from aRunLoop: RunLoop, forMode mode: RunLoop.Mode) {
 		aRunLoop.cancelPerformSelectors(withTarget: self)
 		scheduledRunLoopsMode = nil
 		//print("remove(from:\(aRunLoop), forMode:\(mode))")
