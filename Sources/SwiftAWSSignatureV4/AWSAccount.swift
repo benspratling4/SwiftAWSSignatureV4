@@ -50,7 +50,9 @@ open class AWSAccount {
 	}()
 	
 	static func dateComponents(for date:Date)->DateComponents {
-		return calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second], from: Date())
+        // 2/3/19; Fixed issue; The passed parameter was not used. Also using UTC timezone not local timezone.
+        // return calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second], from: Date())
+        return calendar.dateComponents(in: TimeZone(identifier: "UTC")!, from: date)
 	}
 	
 	///this is a keeper

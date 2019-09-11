@@ -89,7 +89,7 @@ extension URLRequest {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
 		guard let (authheader, seedSignature) = newChunkingAuthorizationHeader(account: account, now: date, nowComponents: nowComponents) else { return}
 		setValue(authheader, forHTTPHeaderField: "Authorization")
-		let timeString:String = HTTPDate(now: nowComponents)
+		let timeString:String = HTTPDate(now: nowComponents, date: date)
 		
 		let timeAndScopeString:String = timeString + "\n" + account.scope(now: nowComponents)
 		guard let signingKey:[UInt8] = account.keyForSigning(now: nowComponents) else {
@@ -102,12 +102,12 @@ extension URLRequest {
 	
 	mutating func addChunkingPreAuthHeaders(date:Date) {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
-		setValue(HTTPDate(now:nowComponents), forHTTPHeaderField: "Date")
+		setValue(HTTPDate(now:nowComponents, date: date), forHTTPHeaderField: "Date")
 		setValue("STREAMING-AWS4-HMAC-SHA256-PAYLOAD", forHTTPHeaderField: "x-amz-content-sha256")
 	}
 	
-	func chunkingStringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents)->(string:String, signedHeaders:String)? {
-		let timeString:String = HTTPDate(now: nowComponents)
+	mutating func chunkingStringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents)->(string:String, signedHeaders:String)? {
+		let timeString:String = HTTPDate(now: nowComponents, date: now)
 		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload() else {
 			return nil
 		}
@@ -121,7 +121,7 @@ extension URLRequest {
 	}
 	
 	
-	func seedSignature(account:AWSAccount, now:Date, nowComponents:DateComponents)->(signature:String, headers:String)? {
+	mutating func seedSignature(account:AWSAccount, now:Date, nowComponents:DateComponents)->(signature:String, headers:String)? {
 		guard let signingKey:[UInt8] = account.keyForSigning(now:nowComponents)
 			,let (string, signedHeaders) = chunkingStringToSign(account:account, now:now, nowComponents:nowComponents)
 			else {
@@ -133,7 +133,7 @@ extension URLRequest {
 		return (signatureHex, signedHeaders)
 	}
 	
-	func newChunkingAuthorizationHeader(account:AWSAccount, now:Date, nowComponents:DateComponents)->(headerValue:String, seedSignature:String)? {
+	mutating func newChunkingAuthorizationHeader(account:AWSAccount, now:Date, nowComponents:DateComponents)->(headerValue:String, seedSignature:String)? {
 		guard let (signature, signedHeaders) = seedSignature(account: account, now: now, nowComponents: nowComponents) else {
 			return nil
 		}
@@ -255,7 +255,7 @@ extension URLRequest {
 	private var buffer:UnsafeMutablePointer<UInt8> = UnsafeMutablePointer<UInt8>.allocate(capacity: ChunkedStream.readBufferSize)
 	
 	deinit {
-		buffer.deallocate(capacity: ChunkedStream.readBufferSize)
+		buffer.deallocate()
 	}
 	
 	private weak var _delegate:StreamDelegate?
@@ -276,15 +276,15 @@ extension URLRequest {
 	}
 	
 	
-	var scheduledRunLoopsMode:(RunLoop, RunLoopMode)?
+    var scheduledRunLoopsMode:(RunLoop, RunLoop.Mode)?
 	
-	@objc public override func schedule(in aRunLoop: RunLoop, forMode mode: RunLoopMode) {
+    @objc public override func schedule(in aRunLoop: RunLoop, forMode mode: RunLoop.Mode) {
 		scheduledRunLoopsMode = (aRunLoop, mode)
 		//print("schedule(in:\(aRunLoop), forMode:\(mode))")
 		originalInputStream.schedule(in: aRunLoop, forMode: mode)
 	}
 	
-	@objc public override func remove(from aRunLoop: RunLoop, forMode mode: RunLoopMode) {
+    @objc public override func remove(from aRunLoop: RunLoop, forMode mode: RunLoop.Mode) {
 		aRunLoop.cancelPerformSelectors(withTarget: self)
 		scheduledRunLoopsMode = nil
 		//print("remove(from:\(aRunLoop), forMode:\(mode))")
@@ -425,7 +425,7 @@ extension InputStream {
 			let readByteCount:Int = read(buffer, maxLength: bufferLength)
 			data.append(buffer, count: readByteCount)
 		}
-		buffer.deallocate(capacity: bufferLength)
+		buffer.deallocate()
 		return data
 	}
 	

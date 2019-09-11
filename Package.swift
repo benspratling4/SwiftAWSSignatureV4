@@ -1,4 +1,4 @@
-// swift-tools-version:4.0
+// swift-tools-version:5.0
 import PackageDescription
 let package = Package(
 	name: "SwiftAWSSignatureV4",
@@ -8,7 +8,7 @@ let package = Package(
 			targets: ["SwiftAWSSignatureV4"]),
 		],
 	dependencies:[
-		.package(url:"https://github.com/IBM-Swift/BlueCryptor.git", from:"0.8.18")
+		.package(url:"https://github.com/IBM-Swift/BlueCryptor.git", .upToNextMajor(from: "1.0.0"))
 	],
 	targets:[
 		.target(
@@ -18,5 +18,5 @@ let package = Package(
 		name: "SwiftAWSSignatureV4Tests",
 		dependencies: ["SwiftAWSSignatureV4"]),
 	  ],
-	swiftLanguageVersions:[3,4]
+	swiftLanguageVersions:[.v4,.v5]
 )
