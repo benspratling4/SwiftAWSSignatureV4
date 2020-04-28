@@ -50,7 +50,7 @@ open class AWSAccount {
 	}()
 	
 	static func dateComponents(for date:Date)->DateComponents {
-		return calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second], from: Date())
+		return calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second], from: date)
 	}
 	
 	///this is a keeper
@@ -65,5 +65,21 @@ open class AWSAccount {
 		return HMAC(using:HMAC.Algorithm.sha256, key: Data(dateRegionServiceKey)).update(byteArray: CryptoUtils.byteArray(from:"aws4_request"))?.final()
 	}
 	
+	
+}
+
+
+public struct AWSService {
+	
+	///such as "s3" or "kms"
+	public let serviceName:String
+	
+	///like "us-east-1"
+	public let region:String
+	
+	public init(serviceName:String, region:String) {
+		self.serviceName = serviceName
+		self.region = region
+	}
 	
 }

@@ -93,7 +93,7 @@ extension URLRequest {
 		
 		let timeAndScopeString:String = timeString + "\n" + account.scope(now: nowComponents)
 		guard let signingKey:[UInt8] = account.keyForSigning(now: nowComponents) else {
-			return 
+			return
 		}
 		let newStream:InputStream = ChunkedStream(account: account, originalStream: originalStream, originalContentLength: totalLength, chunkSize: chunkSize, finalTotalLength:totalLengthWithMetaData, timeAndScope:timeAndScopeString, signingKey:signingKey, seedSignature: seedSignature)
 		httpBodyStream = newStream
@@ -102,7 +102,7 @@ extension URLRequest {
 	
 	mutating func addChunkingPreAuthHeaders(date:Date) {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
-		setValue(HTTPDate(now:nowComponents), forHTTPHeaderField: "Date")
+		setValue(HTTPBasicDate(now:nowComponents), forHTTPHeaderField: "x-amz-date")
 		setValue("STREAMING-AWS4-HMAC-SHA256-PAYLOAD", forHTTPHeaderField: "x-amz-content-sha256")
 	}
 	
@@ -255,7 +255,7 @@ extension URLRequest {
 	private var buffer:UnsafeMutablePointer<UInt8> = UnsafeMutablePointer<UInt8>.allocate(capacity: ChunkedStream.readBufferSize)
 	
 	deinit {
-		buffer.deallocate(capacity: ChunkedStream.readBufferSize)
+		buffer.deallocate()
 	}
 	
 	private weak var _delegate:StreamDelegate?
@@ -276,15 +276,15 @@ extension URLRequest {
 	}
 	
 	
-	var scheduledRunLoopsMode:(RunLoop, RunLoopMode)?
+	var scheduledRunLoopsMode:(RunLoop, RunLoop.Mode)?
 	
-	@objc public override func schedule(in aRunLoop: RunLoop, forMode mode: RunLoopMode) {
+	@objc public override func schedule(in aRunLoop: RunLoop, forMode mode: RunLoop.Mode) {
 		scheduledRunLoopsMode = (aRunLoop, mode)
 		//print("schedule(in:\(aRunLoop), forMode:\(mode))")
 		originalInputStream.schedule(in: aRunLoop, forMode: mode)
 	}
 	
-	@objc public override func remove(from aRunLoop: RunLoop, forMode mode: RunLoopMode) {
+	@objc public override func remove(from aRunLoop: RunLoop, forMode mode: RunLoop.Mode) {
 		aRunLoop.cancelPerformSelectors(withTarget: self)
 		scheduledRunLoopsMode = nil
 		//print("remove(from:\(aRunLoop), forMode:\(mode))")
@@ -425,7 +425,7 @@ extension InputStream {
 			let readByteCount:Int = read(buffer, maxLength: bufferLength)
 			data.append(buffer, count: readByteCount)
 		}
-		buffer.deallocate(capacity: bufferLength)
+		buffer.deallocate()
 		return data
 	}
 	
