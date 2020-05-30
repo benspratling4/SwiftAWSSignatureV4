@@ -9,6 +9,10 @@ import Foundation
 import Dispatch
 import Cryptor
 
+// See https://stackoverflow.com/questions/58592508
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 //Based on http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
 
