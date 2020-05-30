@@ -1,4 +1,7 @@
 SwiftAWSSignatureV4
 
+Version 1.2.1 (5/30/20)
+	Update to Swift 5.2 and changes for FoundationNetworking. The changes for FoundationNetworking were needed as this had been breaking builds on my server after the 5.2 update.
+	
 Version 1.2 (6/9/19)
 	Update to Swift 5
