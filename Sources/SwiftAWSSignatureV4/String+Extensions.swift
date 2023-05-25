@@ -29,7 +29,7 @@ extension String {
 			,let day:Int = comps.day
 			,let hour:Int = comps.hour
 			,let minute:Int = comps.minute
-			,let second:Int = comps.minute
+			,let second:Int = comps.second
 			else { return nil }
 		self = "\(year)"
 			+ "\(month)".prepadded("0", length: 2)
@@ -42,9 +42,9 @@ extension String {
 	}
 	
 	//following amazon's rules
-	public func aws_uriEncoded(encodeSlash:Bool)->String? {
+	public func aws_uriEncoded(encodeSlash:Bool)->String {
 		//is utf8 the right encoding?  Amazon's docs assume ascii
-		guard let bytes:Data = data(using: .utf8) else { return nil }
+		let bytes:Data = Data(self.utf8)
 		var finalString:String = ""
 		for byte in bytes {
 			switch byte {

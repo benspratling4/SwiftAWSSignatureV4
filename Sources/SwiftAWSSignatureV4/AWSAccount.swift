@@ -7,7 +7,9 @@
 //
 
 import Foundation
-import Cryptor
+import Crypto
+
+
 
 open class AWSAccount {
 	///such as "s3" or "kms"
@@ -54,15 +56,25 @@ open class AWSAccount {
 	}
 	
 	///this is a keeper
-	func keyForSigning(now:DateComponents)->[UInt8]? {
-		guard var keyData:Data = "AWS4".data(using: .utf8)
-			,let secretKeyData = secretAccessKey.data(using: .utf8) else { return nil }
-		keyData.append(secretKeyData)
-		let dateByteArray = CryptoUtils.byteArray(from: shortDate(now:now))
-		guard let dateKey:[UInt8] = HMAC(using: HMAC.Algorithm.sha256, key: keyData).update(byteArray: dateByteArray)?.final()
-			,let dateRegionKey:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(dateKey)).update(byteArray: CryptoUtils.byteArray(from:region))?.final()
-			,let dateRegionServiceKey:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(dateRegionKey)).update(byteArray: CryptoUtils.byteArray(from:serviceName))?.final() else { return nil }
-		return HMAC(using:HMAC.Algorithm.sha256, key: Data(dateRegionServiceKey)).update(byteArray: CryptoUtils.byteArray(from:"aws4_request"))?.final()
+	func keyForSigning(now:DateComponents)->Data {
+		var keyData:Data = Data("AWS4".utf8)
+		keyData.append(Data(secretAccessKey.utf8))
+		
+		var dateHmac = HMAC<SHA256>(key: SymmetricKey(data: keyData))
+		dateHmac.update(data: Data(shortDate(now:now).utf8))
+		let dateKey = Data(dateHmac.finalize())
+		
+		var dateRegionHmac = HMAC<SHA256>(key: SymmetricKey(data: dateKey))
+		dateRegionHmac.update(data: Data(region.utf8))
+		let dateRegionKey = Data(dateRegionHmac.finalize())
+		
+		var dateRegionServiceHmac = HMAC<SHA256>(key: SymmetricKey(data: dateRegionKey))
+		dateRegionServiceHmac.update(data: Data(serviceName.utf8))
+		let dateRegionServiceKey = Data(dateRegionServiceHmac.finalize())
+		
+		var finalHmac = HMAC<SHA256>(key: SymmetricKey(data: dateRegionServiceKey))
+		finalHmac.update(data: Data("aws4_request".utf8))
+		return Data(finalHmac.finalize())
 	}
 	
 	

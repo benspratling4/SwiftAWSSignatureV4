@@ -7,7 +7,7 @@
 //
 
 import Foundation
-import Cryptor
+import Crypto
 
 extension UInt64 {
 	
@@ -92,9 +92,7 @@ extension URLRequest {
 		let timeString:String = HTTPDate(now: nowComponents)
 		
 		let timeAndScopeString:String = timeString + "\n" + account.scope(now: nowComponents)
-		guard let signingKey:[UInt8] = account.keyForSigning(now: nowComponents) else {
-			return
-		}
+		let signingKey = account.keyForSigning(now: nowComponents)
 		let newStream:InputStream = ChunkedStream(account: account, originalStream: originalStream, originalContentLength: totalLength, chunkSize: chunkSize, finalTotalLength:totalLengthWithMetaData, timeAndScope:timeAndScopeString, signingKey:signingKey, seedSignature: seedSignature)
 		httpBodyStream = newStream
 		
@@ -114,22 +112,25 @@ extension URLRequest {
 		let canonicalRequestString:String = beforePayload + "\n" + "STREAMING-AWS4-HMAC-SHA256-PAYLOAD"
 		
 		//print("canonical request = \(canonicalRequestString)")
-		let hashOfCanonicalRequest:[UInt8] = Digest(using: .sha256).update(string: canonicalRequestString)?.final() ?? []
-		let hexHash:String = CryptoUtils.hexString(from: hashOfCanonicalRequest)
+		var hashOfCanonicalRequest = SHA256()
+		hashOfCanonicalRequest.update(data: Data(canonicalRequestString.utf8))
+		let hexHash:String = Data(hashOfCanonicalRequest.finalize()).hexBytes()
 		
 		return ("AWS4-HMAC-SHA256\n" + timeString + "\n" + account.scope(now: nowComponents) + "\n" + hexHash, signedHeaders)
 	}
 	
 	
 	func seedSignature(account:AWSAccount, now:Date, nowComponents:DateComponents)->(signature:String, headers:String)? {
-		guard let signingKey:[UInt8] = account.keyForSigning(now:nowComponents)
-			,let (string, signedHeaders) = chunkingStringToSign(account:account, now:now, nowComponents:nowComponents)
+		let signingKey = account.keyForSigning(now:nowComponents)
+		guard let (string, signedHeaders) = chunkingStringToSign(account:account, now:now, nowComponents:nowComponents)
 			else {
 				return nil
 		}
+		var signature = HMAC<SHA256>(key: SymmetricKey(data: Data(signingKey)))
+		signature.update(data: Data(string.utf8))
+		
 		//print("string to sign = \(string)")
-		let signature:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(signingKey)).update(byteArray: CryptoUtils.byteArray(from:string))!.final()
-		let signatureHex:String = CryptoUtils.hexString(from: signature)
+		let signatureHex:String = Data(signature.finalize()).hexBytes()
 		return (signatureHex, signedHeaders)
 	}
 	
@@ -156,11 +157,11 @@ extension URLRequest {
 	
 	private var previousSignature:String
 	
-	private let signingKey:[UInt8]
+	private let signingKey:Data
 	
 	private let delayQueue:DispatchQueue = DispatchQueue(label: "delay chunked stream event queue")
 	
-	public init(account:AWSAccount, originalStream:InputStream, originalContentLength:UInt64, chunkSize:Int, finalTotalLength:UInt64, timeAndScope:String, signingKey:[UInt8], seedSignature:String) {
+	public init(account:AWSAccount, originalStream:InputStream, originalContentLength:UInt64, chunkSize:Int, finalTotalLength:UInt64, timeAndScope:String, signingKey:Data, seedSignature:String) {
 		self.account = account
 		self.originalInputStream = originalStream
 		self.originalContentLength = originalContentLength
@@ -392,16 +393,17 @@ extension URLRequest {
 		stringComponents.append(timeAndScope)
 		stringComponents.append(previousSignature)
 		stringComponents.append("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")	//hash("")
-		guard let thisHash:String = (Digest(using: .sha256).update(data: thisChunkData)?.final()).map({ CryptoUtils.hexString(from: $0).uppercased() }) else { return "" }
-		
-		stringComponents.append(thisHash.lowercased())
+		var thisHash = SHA256()
+		thisHash.update(data: thisChunkData)
+		stringComponents.append(Data(thisHash.finalize()).hexBytes(uppercase: false))
 		return stringComponents.joined(separator: "\n")
 	}
 	
 	func chunkSignature(_ data:Data)->String {
 		let string = stringToSign(thisChunkData: data)
-		let signature:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(signingKey)).update(byteArray: CryptoUtils.byteArray(from:string))!.final()
-		return CryptoUtils.hexString(from: signature)
+		var signature = HMAC<SHA256>(key: SymmetricKey(data: Data(signingKey)))
+		signature.update(data: Data(string.utf8))
+		return Data(signature.finalize()).hexBytes()
 	}
 	
 	func chunkBody(content:Data)->Data? {

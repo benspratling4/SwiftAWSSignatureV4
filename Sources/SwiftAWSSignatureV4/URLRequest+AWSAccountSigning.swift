@@ -7,7 +7,7 @@
 
 import Foundation
 import Dispatch
-import Cryptor
+import Crypto
 
 
 //Based on http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
@@ -68,7 +68,7 @@ extension URLRequest {
 		if let _ = httpBody {
 			if signPayload {
 				//TODO: verify me
-				setValue(sha256HashedBody?.map{$0.hex}.joined(), forHTTPHeaderField: "x-amz-content-sha256")
+				setValue(sha256HashedBody.hexBytes(uppercase: true), forHTTPHeaderField: "x-amz-content-sha256")
 			} else {
 				setValue("UNSIGNED-PAYLOAD", forHTTPHeaderField: "x-amz-content-sha256")
 			}
@@ -130,13 +130,25 @@ extension URLRequest {
 		if queryString?.isEmpty == false {
 		//	uriString.append("?")
 		}
-		guard let encodedURI:String = uriString.aws_uriEncoded(encodeSlash: false) else { return nil }
+		let encodedURI:String = uriString.aws_uriEncoded(encodeSlash: false)
 		if let strongUrl = url
 			,let components = URLComponents(url: strongUrl, resolvingAgainstBaseURL: false)
 			,let queryItems = components.queryItems {
-			queryString = queryItems.sorted(by: { $0.name < $1.name }).map({ (item) -> String in
-				return [item.name.aws_uriEncoded(encodeSlash: true), item.value?.aws_uriEncoded(encodeSlash: true)].compactMap({$0}).joined(separator: "=")
-			}).joined(separator:"&")
+			queryString = queryItems
+				.map({ (name:$0.name.aws_uriEncoded(encodeSlash: true)
+						, value:($0.value ?? "").aws_uriEncoded(encodeSlash: true) )
+				})
+				.sorted(by: {
+					if $0.name < $1.name {
+						return true
+					}
+					if $0.name > $1.name {
+						return false
+					}
+					return $0.value < $1.value
+				})
+				.map({ $0.name + "=" + $0.value })
+				.joined(separator:"&")
 		}
 		let headerValues:[(String, String)] = canonicalHeaders()
 		var headers:String = headerValues.map { (key, value) -> String in
@@ -151,18 +163,17 @@ extension URLRequest {
 	
 	func canonicalRequest(signPayload:Bool)->(request:String, signedHeaders:String)? {
 		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload() else { return nil }
-		let hashedBody:String = signPayload ? sha256HashedBody.map { CryptoUtils.hexString(from: $0).uppercased() }
-			?? "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855" : "UNSIGNED-PAYLOAD"
+		let hashedBody:String = signPayload ? sha256HashedBody.hexBytes(uppercase: true)
+			/*?? "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"*/ : "UNSIGNED-PAYLOAD"
 		return (beforePayload + "\n" + hashedBody, signedHeaders)
 	}
 	
 	
-	var sha256HashedBody:[UInt8]? {
-		if let bodyData = httpBody {
-			return Digest(using: .sha256).update(data: bodyData)?.final()
-		} else {
-			return Digest(using: .sha256).update(string: "")?.final()
-		}
+	var sha256HashedBody:Data {
+		let bodyData = httpBody ?? Data()
+		var sha = SHA256()
+		sha.update(data: bodyData)
+		return Data(sha.finalize())
 	}
 	
 	
@@ -170,20 +181,22 @@ extension URLRequest {
 		let timeString:String = HTTPBasicDate(now: nowComponents)
 		guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload) else { return nil }
 		//print("canonical request = \(request)")
-		let hashOfCanonicalRequest:[UInt8] = Digest(using: .sha256).update(string: request)?.final() ?? []
-		let hexHash:String = CryptoUtils.hexString(from: hashOfCanonicalRequest)
+		var sha = SHA256()
+		sha.update(data: Data(request.utf8))
+		let hexHash:String = Data(sha.finalize()).hexBytes()
 		
 		return ("AWS4-HMAC-SHA256\n" + timeString + "\n" + account.scope(now: nowComponents) + "\n" + hexHash, signedHeaders)
 	}
 	
 	
 	func newAuthorizationHeader(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool = false)->String? {
-		guard let signingKey:[UInt8] = account.keyForSigning(now:nowComponents)
-			,let (string, signedHeaders) = stringToSign(account:account, now:now, nowComponents:nowComponents, signPayload:signPayload)
+		let signingKey = account.keyForSigning(now:nowComponents)
+		guard let (string, signedHeaders) = stringToSign(account:account, now:now, nowComponents:nowComponents, signPayload:signPayload)
 			else { return nil }
 		//print("string to sign = \(string)")
-		let signature:[UInt8] = HMAC(using:HMAC.Algorithm.sha256, key: Data(signingKey)).update(byteArray: CryptoUtils.byteArray(from:string))!.final()
-		let signatureHex:String = CryptoUtils.hexString(from: signature)
+		var signature = HMAC<SHA256>(key: SymmetricKey(data: Data(signingKey)))
+		signature.update(data: Data(string.utf8))
+		let signatureHex:String = Data(signature.finalize()).hexBytes()
 		
 		return "AWS4-HMAC-SHA256 Credential=\(account.credentialString(now:nowComponents)),SignedHeaders=\(signedHeaders),Signature=\(signatureHex)"
 	}
