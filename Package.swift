@@ -3,7 +3,7 @@ import PackageDescription
 let package = Package(
 	name: "SwiftAWSSignatureV4"
 	,platforms: [
-        .macOS(.v10_11),
+        .macOS(.v10_15),
 		.iOS(.v13),
 		.watchOS(.v6),
 		.tvOS(.v13),
