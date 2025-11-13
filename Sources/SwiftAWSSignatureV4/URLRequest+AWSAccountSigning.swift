@@ -64,7 +64,7 @@ extension URLRequest {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
 		//credential
 		//setValue(AWSAccount.credentialString(now:nowComponents), forHTTPHeaderField: "x-amz-credential")
-		setValue(HTTPBasicDate(now:nowComponents), forHTTPHeaderField: "x-amz-date")
+		setValue(nowComponents.HTTPBasicDate(), forHTTPHeaderField: "x-amz-date")
 		if let _ = httpBody {
 			if signPayload {
 				//TODO: verify me
@@ -78,27 +78,6 @@ extension URLRequest {
 		}
 	}
 	
-	///creates a
-	func HTTPDate(now:DateComponents)->String {
-		let dayName:String = AWSAccount.calendar.shortWeekdaySymbols[now.weekday! - 1]
-		let monthShort:String = AWSAccount.calendar.shortMonthSymbols[now.month! - 1]
-		let year:String = "\(now.year!)"
-		let day:String = "\(now.day!)".prepadded("0", length: 2)
-		let hour:String = "\(now.hour!)".prepadded("0", length: 2)
-		let minute:String = "\(now.minute!)".prepadded("0", length: 2)
-		let second:String = "\(now.second!)".prepadded("0", length: 2)
-		return dayName + ", " + day + " " + monthShort + " " + year + " " + hour + ":" + minute + ":" + second + " GMT"
-	}
-	
-	func HTTPBasicDate(now:DateComponents)->String {
-		let month:String = "\(now.month!)".prepadded("0", length: 2)
-		let year:String = "\(now.year!)"
-		let day:String = "\(now.day!)".prepadded("0", length: 2)
-		let hour:String = "\(now.hour!)".prepadded("0", length: 2)
-		let minute:String = "\(now.minute!)".prepadded("0", length: 2)
-		let second:String = "\(now.second!)".prepadded("0", length: 2)
-		return year + month + day + "T" + hour + minute + second + "Z"
-	}
 	
 	///returns sorted key-value tuples
 	func canonicalHeaders()->[(String, String)] {
@@ -122,34 +101,8 @@ extension URLRequest {
 	
 	func canonicalRequestBeforePayload()->(request:String, signedHeaders:String)? {
 		let verb:String = httpMethod ?? "GET"
-		guard var uriString:String = url?.path else { return nil } 	//TODO: "URI Encode"
-		if url?.hasDirectoryPath == true {
-			uriString.append("/")
-		}
-		var queryString:String? = url?.query
-		if queryString?.isEmpty == false {
-		//	uriString.append("?")
-		}
-		let encodedURI:String = uriString.aws_uriEncoded(encodeSlash: false)
-		if let strongUrl = url
-			,let components = URLComponents(url: strongUrl, resolvingAgainstBaseURL: false)
-			,let queryItems = components.queryItems {
-			queryString = queryItems
-				.map({ (name:$0.name.aws_uriEncoded(encodeSlash: true)
-						, value:($0.value ?? "").aws_uriEncoded(encodeSlash: true) )
-				})
-				.sorted(by: {
-					if $0.name < $1.name {
-						return true
-					}
-					if $0.name > $1.name {
-						return false
-					}
-					return $0.value < $1.value
-				})
-				.map({ $0.name + "=" + $0.value })
-				.joined(separator:"&")
-		}
+		guard var encodedURI:String = url?.canonicalPath else { return nil } 	//TODO: "URI Encode"
+		var queryString:String = url?.canonicalQuery ?? ""
 		let headerValues:[(String, String)] = canonicalHeaders()
 		var headers:String = headerValues.map { (key, value) -> String in
 			return key + ":" + value
@@ -157,7 +110,7 @@ extension URLRequest {
 		headers.append("\n")
 		let signedHeaders:String = headerValues.map({$0.0}).joined(separator: ";")
 		
-		return ([verb, encodedURI, queryString ?? "", headers, signedHeaders].joined(separator: "\n"), signedHeaders)
+		return ([verb, encodedURI, queryString, headers, signedHeaders].joined(separator: "\n"), signedHeaders)
 	}
 	
 	
@@ -178,7 +131,7 @@ extension URLRequest {
 	
 	
 	func stringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
-		let timeString:String = HTTPBasicDate(now: nowComponents)
+		let timeString:String = nowComponents.HTTPBasicDate()
 		guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload) else { return nil }
 		//print("canonical request = \(request)")
 		var sha = SHA256()

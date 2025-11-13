@@ -89,7 +89,7 @@ extension URLRequest {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
 		guard let (authheader, seedSignature) = newChunkingAuthorizationHeader(account: account, now: date, nowComponents: nowComponents) else { return}
 		setValue(authheader, forHTTPHeaderField: "Authorization")
-		let timeString:String = HTTPDate(now: nowComponents)
+		let timeString:String = AWSAccount.calendar.HTTPDate(nowComponents)
 		
 		let timeAndScopeString:String = timeString + "\n" + account.scope(now: nowComponents)
 		let signingKey = account.keyForSigning(now: nowComponents)
@@ -100,12 +100,12 @@ extension URLRequest {
 	
 	mutating func addChunkingPreAuthHeaders(date:Date) {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
-		setValue(HTTPBasicDate(now:nowComponents), forHTTPHeaderField: "x-amz-date")
+		setValue(nowComponents.HTTPBasicDate(), forHTTPHeaderField: "x-amz-date")
 		setValue("STREAMING-AWS4-HMAC-SHA256-PAYLOAD", forHTTPHeaderField: "x-amz-content-sha256")
 	}
 	
 	func chunkingStringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents)->(string:String, signedHeaders:String)? {
-		let timeString:String = HTTPDate(now: nowComponents)
+		let timeString:String = AWSAccount.calendar.HTTPDate(nowComponents)
 		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload() else {
 			return nil
 		}
