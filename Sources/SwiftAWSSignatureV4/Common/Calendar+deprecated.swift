@@ -12,6 +12,7 @@ import Foundation
 
 extension Calendar {
 	
+	@available(*, deprecated, renamed: "formattedHTTPDate", message: "Use DateComponents.formattedHTTPDate instead")
 	internal func HTTPDate(_ date:DateComponents)->String {
 		let dayName:String = AWSAccount.calendar.shortWeekdaySymbols[date.weekday! - 1]
 		let monthShort:String = AWSAccount.calendar.shortMonthSymbols[date.month! - 1]
@@ -26,6 +27,7 @@ extension Calendar {
 }
 
 extension DateComponents {
+	@available(*, deprecated, renamed: "formattedHTTPBasicDate", message: "Use DateComponents.formattedHTTPBasicDate instead")
 	internal func HTTPBasicDate()->String {
 		let month:String = "\(month!)".prepadded("0", length: 2)
 		let year:String = "\(year!)"

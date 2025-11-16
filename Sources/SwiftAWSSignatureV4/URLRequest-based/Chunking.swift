@@ -9,27 +9,8 @@
 import Foundation
 import Crypto
 
-extension UInt64 {
-	
-	fileprivate static let hexStrings:[String] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"]
-	
-	///
-	var bytesAsHex:String {
-		
-		var bytes:[String] = []
-		var tempInt:UInt64 = self
-		while tempInt > 0 {
-			let lowBits:Int = Int(tempInt % 16)
-			bytes.insert(UInt64.hexStrings[lowBits], at:0)
-			tempInt = tempInt >> 4
-		}
-		//for ease of calculating total metadata length, prepend '0's to reach constant length
-		while bytes.count < 16 {
-			bytes.insert("0", at: 0)
-		}
-		return bytes.joined()
-	}
-}
+
+#if Apple
 
 #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 
@@ -89,7 +70,7 @@ extension URLRequest {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
 		guard let (authheader, seedSignature) = newChunkingAuthorizationHeader(account: account, now: date, nowComponents: nowComponents) else { return}
 		setValue(authheader, forHTTPHeaderField: "Authorization")
-		let timeString:String = AWSAccount.calendar.HTTPDate(nowComponents)
+		let timeString:String = nowComponents.formattedHTTPDate
 		
 		let timeAndScopeString:String = timeString + "\n" + account.scope(now: nowComponents)
 		let signingKey = account.keyForSigning(now: nowComponents)
@@ -100,12 +81,12 @@ extension URLRequest {
 	
 	mutating func addChunkingPreAuthHeaders(date:Date) {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
-		setValue(nowComponents.HTTPBasicDate(), forHTTPHeaderField: "x-amz-date")
+		setValue(nowComponents.formattedHTTPBasicDate, forHTTPHeaderField: "x-amz-date")
 		setValue("STREAMING-AWS4-HMAC-SHA256-PAYLOAD", forHTTPHeaderField: "x-amz-content-sha256")
 	}
 	
 	func chunkingStringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents)->(string:String, signedHeaders:String)? {
-		let timeString:String = AWSAccount.calendar.HTTPDate(nowComponents)
+		let timeString:String = nowComponents.formattedHTTPDate
 		guard let (beforePayload, signedHeaders) = canonicalRequestBeforePayload() else {
 			return nil
 		}
@@ -432,5 +413,8 @@ extension InputStream {
 	}
 	
 }
+
+#endif
+
 
 #endif

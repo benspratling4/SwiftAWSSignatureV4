@@ -10,8 +10,7 @@ import Foundation
 import Crypto
 
 
-
-open class AWSAccount {
+public final class AWSAccount {
 	///such as "s3" or "kms"
 	public let serviceName:String
 	
@@ -43,16 +42,10 @@ open class AWSAccount {
 		return accessKeyID + "/" + scope(now:now)
 	}
 	
-	static var calendar:Calendar = { ()->(Calendar) in
-		var aCalendar = Calendar(identifier: .gregorian)
-		//TODO: can we do this on linux?
-		aCalendar.locale = Locale(identifier: "en_US")
-		aCalendar.timeZone = TimeZone(secondsFromGMT: 0)!
-		return aCalendar
-	}()
+	static let calendar:Calendar = Calendar.awsSigV4Calendar
 	
 	static func dateComponents(for date:Date)->DateComponents {
-		return calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second], from: date)
+		date.awsSigV4DateComponents
 	}
 	
 	///this is a keeper
@@ -75,6 +68,38 @@ open class AWSAccount {
 		var finalHmac = HMAC<SHA256>(key: SymmetricKey(data: dateRegionServiceKey))
 		finalHmac.update(data: Data("aws4_request".utf8))
 		return Data(finalHmac.finalize())
+	}
+	
+	func stringToSign(canonicalRequest:String, signedHeaders:String, date:DateComponents, headers:[(String, String)])->String {
+		var sha = SHA256()
+		sha.update(data: Data(canonicalRequest.utf8))
+		let hexHash:String = Data(sha.finalize()).hexBytes()
+		let timeString:String = date.formattedHTTPBasicDate
+		return "AWS4-HMAC-SHA256\n" + timeString + "\n" + scope(now: date) + "\n" + hexHash
+	}
+	
+	func signature(canonicalRequest:String, signedHeaders:String, date:DateComponents, headers:[(String, String)], signingKey:Data)throws->String {
+		let stringForSigning = stringToSign(
+			canonicalRequest: canonicalRequest,
+			signedHeaders: signedHeaders,
+			date: date,
+			headers: headers
+		)
+		var signature = HMAC<SHA256>(key: SymmetricKey(data: Data(signingKey)))
+		signature.update(data: Data(stringForSigning.utf8))
+		return Data(signature.finalize()).hexBytes()
+	}
+	
+	func newAuthHeaderValue(canonicalRequest:String, signedHeaders:String, date:DateComponents, headers:[(String, String)])throws->String {
+		let signingKey = keyForSigning(now:date)
+		let signatureHex = try signature(
+			canonicalRequest: canonicalRequest,
+			signedHeaders: signedHeaders,
+			date: date,
+			headers: headers,
+			signingKey:signingKey
+		)
+		return "AWS4-HMAC-SHA256 Credential=\(credentialString(now:date)),SignedHeaders=\(signedHeaders),Signature=\(signatureHex)"
 	}
 	
 	

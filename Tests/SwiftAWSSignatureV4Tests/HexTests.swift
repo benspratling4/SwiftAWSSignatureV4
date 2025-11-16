@@ -1,9 +1,18 @@
 @testable import SwiftAWSSignatureV4
-import XCTest
+import Testing
+#if canImport(Foundation)
+import Foundation
+#else
+import FoundationEssentials
+#endif
 
-class HexTests : XCTestCase {
+
+
+@Suite
+struct HexTests {
 	
-	func testHexInts() {
+	@Test
+	func testHexInts()throws {
 		let cases:[(UInt64, String)] = [
 			(0, "0000000000000000")
 			,(1, "0000000000000001")
@@ -12,12 +21,12 @@ class HexTests : XCTestCase {
 		]
 		
 		for (int, string) in cases {
-			XCTAssertEqual(int.bytesAsHex, string)
+			try #require(int.bytesAsHex == string)
 		}
 	}
 	
-	
-	func testLowerCaseHex() {
+	@Test
+	func testLowerCaseHex()throws {
 		//hexBytes(uppercase
 		
 		let cases:[(Data, String)] = [
@@ -29,11 +38,12 @@ class HexTests : XCTestCase {
 		]
 		
 		for (int, string) in cases {
-			XCTAssertEqual(int.hexBytes(), string)
+			try #require(int.hexBytes() == string)
 		}
 	}
-
-	func testUpperCaseHex() {
+	
+	@Test
+	func testUpperCaseHex()throws {
 		//hexBytes(uppercase
 		
 		let cases:[(Data, String)] = [
@@ -45,7 +55,7 @@ class HexTests : XCTestCase {
 		]
 		
 		for (int, string) in cases {
-			XCTAssertEqual(int.hexBytes(uppercase: true), string)
+			try #require(int.hexBytes(uppercase: true) == string)
 		}
 	}
 	

@@ -5,7 +5,11 @@
 //  Created by Ben Spratling on 11/12/25.
 //
 
+#if canImport(Foundation)
 import Foundation
+#else
+import FoundationEssentials
+#endif
 import Crypto
 
 
@@ -46,7 +50,7 @@ extension URL {
 		let credentialString:String = account.credentialString(now:dateComponents)//.aws_uriEncoded(encodeSlash: true)
 		
 		queryItems.append(URLQueryItem(name: "X-Amz-Credential", value: credentialString))
-		queryItems.append(URLQueryItem(name: "X-Amz-Date", value: dateComponents.HTTPBasicDate()))
+		queryItems.append(URLQueryItem(name: "X-Amz-Date", value: dateComponents.formattedHTTPBasicDate))
 		queryItems.append(URLQueryItem(name: "X-Amz-Expires", value: "\(expires)"))
 		//TODO: support for other headers?
 		queryItems.append(URLQueryItem(name: "X-Amz-SignedHeaders", value: "host"))
@@ -63,7 +67,7 @@ extension URL {
 	
 	
 	internal func stringToSign(dateComponents:DateComponents, account:AWSAccount)->String {
-		let timeString:String = dateComponents.HTTPBasicDate()
+		let timeString:String = dateComponents.formattedHTTPBasicDate
 		var sha = SHA256()
 		sha.update(data: Data(canonicalRequestWithoutBodyOrHeaders.utf8))
 		let hexHash:String = Data(sha.finalize()).hexBytes()
@@ -107,7 +111,8 @@ extension URL {
 	
 	
 	internal var canonicalRequestWithoutBodyOrHeaders:String {
-		"GET\n" + canonicalPath + "\n" + canonicalQuery + "\nhost:" + (host ?? "") + "\n\nhost\nUNSIGNED-PAYLOAD"
+		let components = URLComponents(url: self, resolvingAgainstBaseURL: false)!	//fix me
+		return "GET\n" + components.canonicalPath + "\n" + components.canonicalQuery + "\nhost:" + (components.host ?? "") + "\n\nhost\nUNSIGNED-PAYLOAD"
 	}
 	
 	

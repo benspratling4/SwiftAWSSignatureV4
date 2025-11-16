@@ -5,22 +5,15 @@
 //
 //
 
+#if Apple
+
 import Foundation
 import Dispatch
 import Crypto
 
 
+
 //Based on http://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
-
-
-extension UInt8 {
-	private static let hexChars:[String] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"]
-	var hex:String {
-		let lowBits:UInt8 = self & 0x0F
-		let highBits:UInt8 = (self >> 4)
-		return UInt8.hexChars[Int(highBits)] + UInt8.hexChars[Int(lowBits)]
-	}
-}
 
 
 extension URLRequest {
@@ -64,7 +57,7 @@ extension URLRequest {
 		let nowComponents:DateComponents = AWSAccount.dateComponents(for:date)
 		//credential
 		//setValue(AWSAccount.credentialString(now:nowComponents), forHTTPHeaderField: "x-amz-credential")
-		setValue(nowComponents.HTTPBasicDate(), forHTTPHeaderField: "x-amz-date")
+		setValue(nowComponents.formattedHTTPBasicDate, forHTTPHeaderField: "x-amz-date")
 		if let _ = httpBody {
 			if signPayload {
 				//TODO: verify me
@@ -81,28 +74,18 @@ extension URLRequest {
 	
 	///returns sorted key-value tuples
 	func canonicalHeaders()->[(String, String)] {
-		let allHeaders = allHTTPHeaderFields ?? [:]
-		var headerValues:[(String,String)] = allHeaders.map { (key, value) -> (String, String) in
-			return (key.lowercased(), value.trimmingCharacters(in: .whitespaces))
-		}
-		headerValues = headerValues.filter({ (key0, _) -> Bool in
-			return key0 == "host"
-				|| key0 == "content-type"
-				|| key0.hasPrefix("x-amz-")
-		})
-		if allHeaders["Host"] == nil, let host:String = url?.host {
-			headerValues.append(("host",host))
-		}
-		headerValues.sort { $0.0 < $1.0 }
-		return headerValues
-		
+		return (allHTTPHeaderFields ?? [:])
+			.map({ (key, value) -> (String, String)  in
+				(key.lowercased(), value)
+			})
+			.canonicalHeaders(host:url?.host ?? "")
 	}
 	
 	
 	func canonicalRequestBeforePayload()->(request:String, signedHeaders:String)? {
 		let verb:String = httpMethod ?? "GET"
-		guard var encodedURI:String = url?.canonicalPath else { return nil } 	//TODO: "URI Encode"
-		var queryString:String = url?.canonicalQuery ?? ""
+		guard let encodedURI:String = url?.canonicalPath else { return nil } 	//TODO: "URI Encode"
+		let queryString:String = url?.canonicalQuery ?? ""
 		let headerValues:[(String, String)] = canonicalHeaders()
 		var headers:String = headerValues.map { (key, value) -> String in
 			return key + ":" + value
@@ -131,7 +114,7 @@ extension URLRequest {
 	
 	
 	func stringToSign(account:AWSAccount, now:Date, nowComponents:DateComponents, signPayload:Bool)->(string:String, signedHeaders:String)? {
-		let timeString:String = nowComponents.HTTPBasicDate()
+		let timeString:String = nowComponents.formattedHTTPBasicDate
 		guard let (request, signedHeaders) = canonicalRequest(signPayload:signPayload) else { return nil }
 		//print("canonical request = \(request)")
 		var sha = SHA256()
@@ -155,3 +138,6 @@ extension URLRequest {
 	}
 	
 }
+
+
+#endif

@@ -6,7 +6,12 @@
 //
 //
 
+#if canImport(Foundation)
 import Foundation
+#else
+import FoundationEssentials
+#endif
+
 
 extension String {
 	//pads the string to be at least 'length' bytes in .utf8 by pre-pending string
